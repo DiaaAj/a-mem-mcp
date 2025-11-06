@@ -55,17 +55,26 @@ class OpenAIController(BaseLLMController):
         except ImportError:
             raise ImportError("OpenAI package not found. Install it with: pip install openai")
 
-    def get_completion(self, prompt: str, response_format: dict, temperature: float = 0.7) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+    def get_completion(self, prompt: str, response_format: dict, temperature: float = 1.0, max_tokens: int = None) -> str:
+        # Build kwargs dynamically based on model type
+        kwargs = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": "You must respond with a JSON object."},
                 {"role": "user", "content": prompt}
             ],
-            response_format=response_format,
-            temperature=temperature,
-            max_tokens=1000
-        )
+            "response_format": response_format,
+            "temperature": temperature,
+        }
+
+        # GPT-5 and newer reasoning models use max_completion_tokens
+        if max_tokens is not None:
+            if "gpt-5" in self.model.lower() or "o1" in self.model.lower() or "o3" in self.model.lower():
+                kwargs["max_completion_tokens"] = max_tokens
+            else:
+                kwargs["max_tokens"] = max_tokens
+
+        response = self.client.chat.completions.create(**kwargs)
         return response.choices[0].message.content
 
 class OllamaController(BaseLLMController):
@@ -73,7 +82,7 @@ class OllamaController(BaseLLMController):
         from ollama import chat
         self.model = model
 
-    def get_completion(self, prompt: str, response_format: dict, temperature: float = 0.7) -> str:
+    def get_completion(self, prompt: str, response_format: dict, temperature: float = 1.0) -> str:
         try:
             response = completion(
                 model="ollama_chat/{}".format(self.model),
@@ -105,7 +114,7 @@ class SGLangController(BaseLLMController):
         self.sglang_port = sglang_port
         self.base_url = f"{sglang_host}:{sglang_port}"
 
-    def get_completion(self, prompt: str, response_format: dict, temperature: float = 0.7) -> str:
+    def get_completion(self, prompt: str, response_format: dict, temperature: float = 1.0) -> str:
         try:
             json_schema = response_format.get("json_schema", {}).get("schema", {})
             json_schema_str = json.dumps(json_schema)
@@ -175,7 +184,7 @@ class OpenRouterController(BaseLLMController):
         os.environ['OPENROUTER_API_KEY'] = api_key
         self.api_key = api_key
 
-    def get_completion(self, prompt: str, response_format: dict, temperature: float = 0.7) -> str:
+    def get_completion(self, prompt: str, response_format: dict, temperature: float = 1.0) -> str:
         """Get completion from OpenRouter API.
 
         Args:
@@ -224,5 +233,5 @@ class LLMController:
         else:
             raise ValueError("Backend must be one of: 'openai', 'ollama', 'sglang', 'openrouter'")
 
-    def get_completion(self, prompt: str, response_format: dict = None, temperature: float = 0.7) -> str:
+    def get_completion(self, prompt: str, response_format: dict = None, temperature: float = 1.0) -> str:
         return self.llm.get_completion(prompt, response_format, temperature)

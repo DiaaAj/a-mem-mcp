@@ -249,19 +249,19 @@ class AgenticMemorySystem:
         )
         
         if needs_analysis:
-            try:
-                analysis = self.analyze_content(content)
-                
-                # Only update attributes that are not provided or have default values
-                if not note.keywords:
-                    note.keywords = analysis.get("keywords", [])
-                if note.context == "General":
-                    note.context = analysis.get("context", "General") 
-                if not note.tags:
-                    note.tags = analysis.get("tags", [])
+            # try:
+            analysis = self.analyze_content(content)
+            
+            # Only update attributes that are not provided or have default values
+            if not note.keywords:
+                note.keywords = analysis.get("keywords", [])
+            if note.context == "General":
+                note.context = analysis.get("context", "General") 
+            if not note.tags:
+                note.tags = analysis.get("tags", [])
                     
-            except Exception as e:
-                print(f"Warning: LLM analysis failed, using default values: {e}")
+            # except Exception as e:
+            #     print(f"Warning: LLM analysis failed, using default values: {e}")
         
         # Update retriever with all documents
         evo_label, note = self.process_memory(note)
