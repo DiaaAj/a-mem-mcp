@@ -76,17 +76,52 @@ The system auto-generates keywords/tags via LLM if not provided. Memories persis
             ),
             Tool(
                 name="read_memory_note",
-                description="Read a specific memory note by its ID. Use this when you have a memory ID from search results and want to see full details including links and evolution history.",
+                description="""Read full details of a specific memory by ID.
+
+**WHEN TO USE:**
+• After search returns memory IDs - read full details to get complete context
+• To see evolution history showing how the memory has been refined over time
+• To view linked memories (related concepts the system connected automatically)
+• To check retrieval_count and last_accessed metadata
+
+**RETURNS:** Complete memory with content, keywords, tags, context, links, and evolution history.
+
+Use this as a follow-up to search_memories() when you need comprehensive details beyond the search preview.""",
                 inputSchema=ReadNoteArgs.model_json_schema()
             ),
             Tool(
                 name="update_memory_note",
-                description="Update an existing memory note's content or metadata. Use this when you discover new information that refines or corrects a previously stored memory.",
+                description="""Update existing memory when you learn more or need to correct information.
+
+**USE THIS PROACTIVELY WHEN:**
+• You discover additional details about something already in memory (e.g., "I stored info about the auth flow, but now found it also handles rate limiting")
+• Initial understanding was incomplete or partially incorrect
+• You learn edge cases or exceptions to a previously stored pattern
+• Context changes (e.g., a dependency was updated, changing how something works)
+
+**IMPORTANT:** Keep memories accurate! Update rather than creating duplicate memories when you learn more about an existing topic.
+
+**WORKFLOW:**
+1. Search for existing memory on a topic
+2. If found and needs refinement, update it
+3. If topic is different enough, create new memory with add_memory_note instead
+
+You can update: content, keywords, tags, or context. Other fields (timestamp, links) are managed automatically.""",
                 inputSchema=UpdateNoteArgs.model_json_schema()
             ),
             Tool(
                 name="delete_memory_note",
-                description="Delete a memory note by its ID. Use this to remove incorrect or obsolete memories from the knowledge base.",
+                description="""Delete incorrect or obsolete memories from the knowledge base.
+
+**WHEN TO DELETE:**
+• Memory contains completely wrong information that can't be fixed with update
+• Information is obsolete (e.g., "Feature X uses deprecated API Y" but Feature X was removed)
+• Duplicate memory that serves no purpose (prefer update_memory_note if consolidating)
+• Testing/placeholder memory created by accident
+
+**CAUTION:** Prefer update_memory_note over delete when information just needs correction. Only delete when the memory has no salvageable value.
+
+The memory system evolves connections automatically, so removing a memory may affect the knowledge graph.""",
                 inputSchema=DeleteNoteArgs.model_json_schema()
             ),
             Tool(
