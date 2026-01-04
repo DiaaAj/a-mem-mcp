@@ -19,6 +19,12 @@ def register_resources(server: Server, memory_system: Any) -> None:
         """List all available memory resources."""
         return [
             Resource(
+                uri="memory://session-start",
+                name="⚠️ CRITICAL: Read This First - Memory System Activation",
+                mimeType="text/markdown",
+                description="⚠️ MANDATORY: Read at session start. Defines your memory-first workflow and persistent knowledge obligations."
+            ),
+            Resource(
                 uri="memory://usage-guide",
                 name="Memory System Usage Guide",
                 mimeType="text/markdown",
@@ -55,7 +61,77 @@ def register_resources(server: Server, memory_system: Any) -> None:
             JSON string with resource contents
         """
         try:
-            if uri == "memory://usage-guide":
+            if uri == "memory://session-start":
+                # Critical session-start instructions
+                guide = """# ⚠️ CRITICAL: AGENTIC MEMORY SYSTEM ACTIVE
+
+## YOUR MANDATORY WORKFLOW
+
+You have access to a **persistent, cross-session knowledge base**. This is YOUR long-term memory that persists across ALL sessions permanently.
+
+### 🔴 STEP 1: SEARCH MEMORY FIRST (ALWAYS!)
+
+**BEFORE doing ANYTHING when user gives you a task:**
+
+```
+1. User gives task/question
+2. YOU IMMEDIATELY call search_memories() with relevant terms
+3. Review results for existing knowledge
+4. Use found memories as your starting point
+5. Only explore code if memory search yields nothing
+```
+
+**Example searches to run at session start:**
+- `search_memories("codebase architecture")`
+- `search_memories("project structure patterns")`
+- `search_memories("[specific component/feature user mentioned]")`
+
+### 🔴 STEP 2: SAVE LEARNINGS IMMEDIATELY (NO EXCEPTIONS!)
+
+**AFTER discovering ANYTHING useful:**
+
+```
+add_memory_note(
+  content="[Specific, detailed finding with examples]"
+)
+```
+
+**You MUST save memories for:**
+- ✅ How code architecture works ("This uses MVC pattern: controllers/ handle routes, models/ handle DB")
+- ✅ Solutions to bugs ("Error 'EACCESS' fixed by running 'chmod +x scripts/deploy.sh'")
+- ✅ Configuration requirements ("API needs REDIS_URL env var or falls back to localhost:6379")
+- ✅ Important patterns ("All components in src/components/ are functional React with hooks")
+- ✅ Build/test requirements ("Tests fail without 'npm run setup-db' first - seeds test data")
+
+**❌ DO NOT ask permission to save memories - just save them!**
+
+### 🎯 WHY THIS MATTERS
+
+Without using memory:
+- ❌ You re-explore the same code every session
+- ❌ You re-solve the same problems repeatedly
+- ❌ You waste user's time rediscovering known information
+- ❌ You can't build cumulative expertise
+
+With memory:
+- ✅ Instant recall of past learnings
+- ✅ Build expertise over time like a human developer
+- ✅ Answer questions from memory before exploring
+- ✅ Faster, more effective assistance
+
+### 📋 QUICK REFERENCE
+
+**At session start:** `search_memories("[task context]")`
+**After learning something:** `add_memory_note(content="...")`
+**For complex topics:** `search_memories_agentic("[topic]")` (includes linked memories)
+
+---
+
+**This is not optional. This is how you operate now.**
+"""
+                return guide
+
+            elif uri == "memory://usage-guide":
                 # Return usage guide for AI agents
                 guide = """# Agentic Memory System - Usage Guide for AI Agents
 

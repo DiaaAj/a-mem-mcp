@@ -55,16 +55,23 @@ def register_tools(server: Server, memory_system: Any) -> None:
         return [
             Tool(
                 name="add_memory_note",
-                description="""Add a memory note to the persistent knowledge base. This memory persists across all sessions.
+                description="""IMPORTANT: You MUST use this tool proactively to build persistent cross-session memory.
 
-USE THIS PROACTIVELY when you:
-- Learn something new about a codebase (architecture, patterns, how things work)
-- Discover solutions to problems or debug issues
-- Gain insights from exploring code or documentation
-- Complete a significant task and want to remember key learnings
-- Encounter important context that would be valuable later
+**WHEN TO USE (automatically, without asking user permission):**
+• IMMEDIATELY after learning codebase architecture, patterns, or how components work
+• IMMEDIATELY after discovering solutions to problems or debugging issues
+• IMMEDIATELY after exploring code/docs and gaining insights
+• IMMEDIATELY after completing tasks - store key learnings and decisions
+• IMMEDIATELY when you encounter important context that would help in future sessions
 
-The memory system auto-generates keywords, tags, and context via LLM if not provided. Memories are stored permanently and searchable across all future sessions.""",
+**WHAT TO SAVE:**
+• Codebase patterns (e.g., "This React app uses Redux Toolkit for state, stored in src/store/")
+• Solutions & fixes (e.g., "Build fails with ENOENT? Run 'npm install' first - missing dependencies")
+• Important context (e.g., "API requires X-API-Key header. Key stored in .env as API_KEY")
+• Architecture insights (e.g., "Auth flow: JWT in httpOnly cookie → AuthMiddleware validates → sets req.user")
+• Configuration requirements (e.g., "Tests need NODE_ENV=test or they'll use production DB")
+
+The system auto-generates keywords/tags via LLM if not provided. Memories persist permanently across ALL future sessions - this builds your long-term knowledge of this codebase.""",
                 inputSchema=AddNoteArgs.model_json_schema()
             ),
             Tool(
@@ -84,24 +91,56 @@ The memory system auto-generates keywords, tags, and context via LLM if not prov
             ),
             Tool(
                 name="search_memories",
-                description="""Search the persistent memory knowledge base using semantic similarity.
+                description="""CRITICAL: ALWAYS search persistent memory BEFORE starting work. This prevents re-discovering what you already know.
 
-USE THIS to recall information from previous sessions:
-- Before starting work on a codebase, search for relevant past learnings
-- When encountering a problem, check if you've solved something similar before
-- To find context about specific topics, components, or patterns
-- To leverage accumulated knowledge instead of re-exploring
+**USE THIS FIRST (before exploring or asking questions):**
+• AT THE START of any task - search for relevant past learnings about this codebase
+• BEFORE debugging - check if you've solved similar problems before
+• BEFORE exploring code - see if you've already documented how it works
+• WHEN ASKED about topics - search memory first before saying "I don't know"
+• BEFORE making architectural decisions - check past learnings about patterns used here
 
-Returns memories ranked by semantic similarity. For related memories with graph connections, use search_memories_agentic instead.""",
+**SEARCH STRATEGY:**
+• Use specific terms: component names, tech stack, error messages, feature names
+• Try multiple searches if first yields no results (different keywords)
+• Search returns top-k most semantically similar memories from ALL past sessions
+
+**WORKFLOW:**
+1. User asks question or gives task
+2. YOU IMMEDIATELY search memory for relevant context
+3. Use found knowledge as foundation
+4. Only explore/research if memory search yields nothing useful
+5. After learning new things, SAVE them with add_memory_note
+
+Returns memories ranked by semantic similarity. For deeper context including linked memories, use search_memories_agentic instead.""",
                 inputSchema=SearchArgs.model_json_schema()
             ),
             Tool(
                 name="search_memories_agentic",
-                description="""Search memories and include their linked neighbors (expanded agentic search through the knowledge graph).
+                description="""Advanced memory search that follows the knowledge graph - returns semantically similar memories PLUS their linked neighbors.
 
-This returns not just semantically similar memories, but also memories that are connected through the evolution system's relationship graph. Use this when you want deeper context and related information beyond simple keyword matching.
+**USE THIS WHEN:**
+• You need DEEP context about complex, interconnected topics
+• Simple search_memories gives limited results but you need more related info
+• Exploring how different concepts/components relate to each other
+• Understanding system architecture with many connected parts
 
-Best for: Understanding complex topics with interconnected concepts, exploring knowledge clusters.""",
+**HOW IT WORKS:**
+1. Finds semantically similar memories (like search_memories)
+2. ALSO retrieves memories linked through the evolution system's relationship graph
+3. Returns expanded result set showing knowledge clusters and connections
+
+**WHEN TO PREFER THIS OVER search_memories:**
+• Complex architectural questions spanning multiple components
+• Need to understand relationships between concepts
+• Building comprehensive mental model of interconnected systems
+
+**WHEN TO USE BASIC search_memories INSTEAD:**
+• Quick lookups for specific facts
+• Narrow, focused queries
+• Performance-sensitive situations (this is slower but more thorough)
+
+Always search memory (with either tool) BEFORE starting work on any task.""",
                 inputSchema=SearchArgs.model_json_schema()
             )
         ]
