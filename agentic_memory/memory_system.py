@@ -97,7 +97,8 @@ class AgenticMemorySystem:
                  evo_threshold: int = 100,
                  api_key: Optional[str] = None,
                  sglang_host: str = "http://localhost",
-                 sglang_port: int = 30000):
+                 sglang_port: int = 30000,
+                 storage_path: str = "./chroma_db"):
         """Initialize the memory system.
 
         Args:
@@ -108,19 +109,21 @@ class AgenticMemorySystem:
             api_key: API key for the LLM service
             sglang_host: Host URL for SGLang server (default: http://localhost)
             sglang_port: Port for SGLang server (default: 30000)
+            storage_path: Directory path for persistent ChromaDB storage (default: ./chroma_db)
         """
         self.memories = {}
         self.model_name = model_name
+        self.storage_path = storage_path
         # Initialize ChromaDB retriever with empty collection
         try:
             # First try to reset the collection if it exists
-            temp_retriever = ChromaRetriever(collection_name="memories",model_name=self.model_name)
+            temp_retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
             temp_retriever.client.reset()
         except Exception as e:
             logger.warning(f"Could not reset ChromaDB collection: {e}")
 
         # Create a fresh retriever instance
-        self.retriever = ChromaRetriever(collection_name="memories",model_name=self.model_name)
+        self.retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
 
         # Initialize LLM controller
         self.llm_controller = LLMController(llm_backend, llm_model, api_key, sglang_host, sglang_port)
@@ -292,8 +295,8 @@ class AgenticMemorySystem:
     def consolidate_memories(self):
         """Consolidate memories: update retriever with new documents"""
         # Reset ChromaDB collection
-        self.retriever = ChromaRetriever(collection_name="memories",model_name=self.model_name)
-        
+        self.retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
+
         # Re-add all memory documents with their complete metadata
         for memory in self.memories.values():
             metadata = {
