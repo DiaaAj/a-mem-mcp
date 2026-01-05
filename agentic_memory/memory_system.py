@@ -18,6 +18,7 @@ import pickle
 from pathlib import Path
 from litellm import completion
 import time
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,93 @@ class MemoryNote:
         self.retrieval_count = retrieval_count or 0
         self.evolution_history = evolution_history or []
 
+class MemoryCache:
+    """LRU cache for MemoryNote objects.
+
+    Provides O(1) access to recently used memories with automatic eviction
+    of least recently used items when capacity is reached.
+    """
+
+    def __init__(self, max_size: int = 1000):
+        """Initialize the cache with specified capacity.
+
+        Args:
+            max_size: Maximum number of memories to keep in cache
+        """
+        self.max_size = max_size
+        self.cache = OrderedDict()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    def get(self, memory_id: str) -> Optional[MemoryNote]:
+        """Get memory from cache, moving to end (most recent).
+
+        Args:
+            memory_id: ID of memory to retrieve
+
+        Returns:
+            MemoryNote if found in cache, None otherwise
+        """
+        if memory_id in self.cache:
+            self.hits += 1
+            # Move to end to mark as recently used
+            self.cache.move_to_end(memory_id)
+            return self.cache[memory_id]
+        self.misses += 1
+        return None
+
+    def put(self, memory_id: str, note: MemoryNote):
+        """Add/update memory in cache with LRU eviction.
+
+        Args:
+            memory_id: ID of memory
+            note: MemoryNote object to cache
+        """
+        if memory_id in self.cache:
+            # Update existing entry and move to end
+            self.cache.move_to_end(memory_id)
+        else:
+            # Check if at capacity
+            if len(self.cache) >= self.max_size:
+                # Evict least recently used (first item)
+                self.cache.popitem(last=False)
+                self.evictions += 1
+        self.cache[memory_id] = note
+
+    def remove(self, memory_id: str):
+        """Remove memory from cache.
+
+        Args:
+            memory_id: ID of memory to remove
+        """
+        if memory_id in self.cache:
+            del self.cache[memory_id]
+
+    def clear(self):
+        """Clear entire cache and reset statistics."""
+        self.cache.clear()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics.
+
+        Returns:
+            Dict with cache metrics (size, hits, misses, evictions, hit_rate)
+        """
+        total_requests = self.hits + self.misses
+        hit_rate = self.hits / total_requests if total_requests > 0 else 0
+        return {
+            'size': len(self.cache),
+            'max_size': self.max_size,
+            'hits': self.hits,
+            'misses': self.misses,
+            'evictions': self.evictions,
+            'hit_rate': hit_rate
+        }
+
 class AgenticMemorySystem:
     """Core memory system that manages memory notes and their evolution.
     
@@ -98,7 +186,9 @@ class AgenticMemorySystem:
                  api_key: Optional[str] = None,
                  sglang_host: str = "http://localhost",
                  sglang_port: int = 30000,
-                 storage_path: str = "./chroma_db"):
+                 storage_path: str = "./chroma_db",
+                 cache_size: int = 1000,
+                 enable_cache: bool = True):
         """Initialize the memory system.
 
         Args:
@@ -110,25 +200,31 @@ class AgenticMemorySystem:
             sglang_host: Host URL for SGLang server (default: http://localhost)
             sglang_port: Port for SGLang server (default: 30000)
             storage_path: Directory path for persistent ChromaDB storage (default: ./chroma_db)
+            cache_size: Maximum number of memories to keep in LRU cache (default: 1000)
+            enable_cache: Whether to enable memory caching (default: True)
         """
-        self.memories = {}
+        # Initialize LRU cache instead of self.memories dict
+        self.cache = MemoryCache(max_size=cache_size)
+        self.cache_enabled = enable_cache
+
         self.model_name = model_name
         self.storage_path = storage_path
-        # Initialize ChromaDB retriever with empty collection
-        try:
-            # First try to reset the collection if it exists
-            temp_retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
-            temp_retriever.client.reset()
-        except Exception as e:
-            logger.warning(f"Could not reset ChromaDB collection: {e}")
 
-        # Create a fresh retriever instance
-        self.retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
+        # Initialize ChromaDB retriever WITHOUT resetting (preserves existing data)
+        self.retriever = ChromaRetriever(
+            collection_name="memories",
+            model_name=self.model_name,
+            persist_directory=self.storage_path
+        )
 
         # Initialize LLM controller
         self.llm_controller = LLMController(llm_backend, llm_model, api_key, sglang_host, sglang_port)
         self.evo_cnt = 0
         self.evo_threshold = evo_threshold
+
+        # Log initialization info
+        existing_count = self.retriever.count()
+        logger.info(f"AgenticMemorySystem initialized with {existing_count} existing memories in ChromaDB")
 
         # Evolution system prompt
         self._evolution_system_prompt = '''
@@ -162,7 +258,53 @@ class AgenticMemorySystem:
                                     "new_tags_neighborhood": [["tag_1",...,"tag_n"],...["tag_1",...,"tag_n"]],
                                 }}
                                 '''
-        
+
+    def _metadata_to_memory_note(self, metadata: Dict) -> MemoryNote:
+        """Convert ChromaDB metadata dict to MemoryNote object.
+
+        Args:
+            metadata: Deserialized metadata dict from ChromaDB
+
+        Returns:
+            MemoryNote object reconstructed from metadata
+        """
+        return MemoryNote(
+            content=metadata.get('content', ''),
+            id=metadata.get('id'),
+            keywords=metadata.get('keywords', []),
+            links=metadata.get('links', []),
+            retrieval_count=metadata.get('retrieval_count', 0),
+            timestamp=metadata.get('timestamp'),
+            last_accessed=metadata.get('last_accessed'),
+            context=metadata.get('context', 'General'),
+            evolution_history=metadata.get('evolution_history', []),
+            category=metadata.get('category', 'Uncategorized'),
+            tags=metadata.get('tags', [])
+        )
+
+    def _memory_note_to_metadata(self, note: MemoryNote) -> Dict:
+        """Convert MemoryNote object to ChromaDB metadata dict.
+
+        Args:
+            note: MemoryNote object to serialize
+
+        Returns:
+            Dict suitable for ChromaDB storage
+        """
+        return {
+            "id": note.id,
+            "content": note.content,
+            "keywords": note.keywords,
+            "links": note.links,
+            "retrieval_count": note.retrieval_count,
+            "timestamp": note.timestamp,
+            "last_accessed": note.last_accessed,
+            "context": note.context,
+            "evolution_history": note.evolution_history,
+            "category": note.category,
+            "tags": note.tags
+        }
+
     def analyze_content(self, content: str) -> Dict:            
         """Analyze content using LLM to extract semantic metadata.
         
@@ -266,11 +408,14 @@ class AgenticMemorySystem:
             # except Exception as e:
             #     print(f"Warning: LLM analysis failed, using default values: {e}")
         
-        # Update retriever with all documents
+        # Process memory evolution
         evo_label, note = self.process_memory(note)
-        self.memories[note.id] = note
-        
-        # Add to ChromaDB with complete metadata
+
+        # Cache the new memory (write-through caching)
+        if self.cache_enabled:
+            self.cache.put(note.id, note)
+
+        # Add to ChromaDB with complete metadata (persistent storage)
         metadata = {
             "id": note.id,
             "content": note.content,
@@ -285,34 +430,13 @@ class AgenticMemorySystem:
             "tags": note.tags
         }
         self.retriever.add_document(note.content, metadata, note.id)
-        
+
+        # Track evolution count (could be used for metrics/logging)
         if evo_label == True:
             self.evo_cnt += 1
-            if self.evo_cnt % self.evo_threshold == 0:
-                self.consolidate_memories()
-        return note.id
-    
-    def consolidate_memories(self):
-        """Consolidate memories: update retriever with new documents"""
-        # Reset ChromaDB collection
-        self.retriever = ChromaRetriever(collection_name="memories", model_name=self.model_name, persist_directory=self.storage_path)
+            # Note: consolidate_memories() removed - all changes now sync immediately
 
-        # Re-add all memory documents with their complete metadata
-        for memory in self.memories.values():
-            metadata = {
-                "id": memory.id,
-                "content": memory.content,
-                "keywords": memory.keywords,
-                "links": memory.links,
-                "retrieval_count": memory.retrieval_count,
-                "timestamp": memory.timestamp,
-                "last_accessed": memory.last_accessed,
-                "context": memory.context,
-                "evolution_history": memory.evolution_history,
-                "category": memory.category,
-                "tags": memory.tags
-            }
-            self.retriever.add_document(memory.content, metadata, memory.id)
+        return note.id
     
     def find_related_memories(self, query: str, k: int = 5) -> Tuple[str, List[str]]:
         """Find related memories using ChromaDB retrieval
@@ -320,7 +444,7 @@ class AgenticMemorySystem:
         Returns:
             Tuple[str, List[str]]: (formatted_memory_string, list_of_memory_ids)
         """
-        if not self.memories:
+        if self.retriever.count() == 0:
             return "", []
 
         try:
@@ -347,7 +471,7 @@ class AgenticMemorySystem:
 
     def find_related_memories_raw(self, query: str, k: int = 5) -> str:
         """Find related memories using ChromaDB retrieval in raw format"""
-        if not self.memories:
+        if self.retriever.count() == 0:
             return ""
             
         # Get results from ChromaDB
@@ -369,81 +493,111 @@ class AgenticMemorySystem:
                     links = metadata.get('links', [])
                     j = 0
                     for link_id in links:
-                        if link_id in self.memories and j < k:
-                            neighbor = self.memories[link_id]
+                        neighbor = self.read(link_id)  # Cache-aware lazy loading
+                        if neighbor and j < k:
                             memory_str += f"talk start time:{neighbor.timestamp}\tmemory content: {neighbor.content}\tmemory context: {neighbor.context}\tmemory keywords: {str(neighbor.keywords)}\tmemory tags: {str(neighbor.tags)}\n"
                             j += 1
                             
         return memory_str
 
     def read(self, memory_id: str) -> Optional[MemoryNote]:
-        """Retrieve a memory note by its ID.
-        
+        """Retrieve a memory note by its ID (cache-aware lazy loading).
+
+        Implements cache-first pattern:
+        1. Check cache for memory (fast O(1) lookup)
+        2. If miss, load from ChromaDB (persistent storage)
+        3. Cache the loaded memory for future reads
+
         Args:
             memory_id (str): ID of the memory to retrieve
-            
+
         Returns:
             MemoryNote if found, None otherwise
         """
-        return self.memories.get(memory_id)
+        # Try cache first
+        if self.cache_enabled:
+            cached = self.cache.get(memory_id)
+            if cached:
+                # Update last_accessed timestamp
+                cached.last_accessed = datetime.now().strftime("%Y%m%d%H%M")
+                cached.retrieval_count += 1
+                return cached
+
+        # Cache miss - lazy load from ChromaDB
+        metadata = self.retriever.get_by_id(memory_id)
+        if metadata:
+            note = self._metadata_to_memory_note(metadata)
+            # Update access metadata
+            note.last_accessed = datetime.now().strftime("%Y%m%d%H%M")
+            note.retrieval_count += 1
+
+            # Cache for future access
+            if self.cache_enabled:
+                self.cache.put(memory_id, note)
+
+            return note
+
+        return None
     
     def update(self, memory_id: str, **kwargs) -> bool:
-        """Update a memory note.
-        
+        """Update a memory note with write-through caching.
+
+        Implements write-through pattern:
+        1. Load memory from cache or ChromaDB
+        2. Update fields in MemoryNote object
+        3. Sync to ChromaDB immediately (persistent)
+        4. Update cache (if enabled)
+
         Args:
             memory_id: ID of memory to update
             **kwargs: Fields to update
-            
+
         Returns:
-            bool: True if update successful
+            bool: True if update successful, False if memory not found
         """
-        if memory_id not in self.memories:
+        # Load memory (cache-aware)
+        note = self.read(memory_id)
+        if not note:
             return False
-            
-        note = self.memories[memory_id]
-        
+
         # Update fields
         for key, value in kwargs.items():
             if hasattr(note, key):
                 setattr(note, key, value)
-                
-        # Update in ChromaDB
-        metadata = {
-            "id": note.id,
-            "content": note.content,
-            "keywords": note.keywords,
-            "links": note.links,
-            "retrieval_count": note.retrieval_count,
-            "timestamp": note.timestamp,
-            "last_accessed": note.last_accessed,
-            "context": note.context,
-            "evolution_history": note.evolution_history,
-            "category": note.category,
-            "tags": note.tags
-        }
-        
-        # Delete and re-add to update
-        self.retriever.delete_document(memory_id)
-        self.retriever.add_document(document=note.content, metadata=metadata, doc_id=memory_id)
-        
+
+        # Sync to ChromaDB immediately (write-through)
+        metadata = self._memory_note_to_metadata(note)
+        self.retriever.update_document(memory_id, metadata, note.content)
+
+        # Update cache with new version
+        if self.cache_enabled:
+            self.cache.put(memory_id, note)
+
         return True
     
     def delete(self, memory_id: str) -> bool:
-        """Delete a memory note by its ID.
-        
+        """Delete a memory note by its ID with cache invalidation.
+
+        Deletes from both persistent storage (ChromaDB) and cache.
+
         Args:
             memory_id (str): ID of the memory to delete
-            
+
         Returns:
             bool: True if memory was deleted, False if not found
         """
-        if memory_id in self.memories:
-            # Delete from ChromaDB
+        try:
+            # Delete from ChromaDB (persistent storage)
             self.retriever.delete_document(memory_id)
-            # Delete from local storage
-            del self.memories[memory_id]
+
+            # Invalidate cache entry
+            if self.cache_enabled:
+                self.cache.remove(memory_id)
+
             return True
-        return False
+        except Exception as e:
+            logger.error(f"Error deleting memory {memory_id}: {e}")
+            return False
     
     def _search_raw(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """Internal search method that returns raw results from ChromaDB.
@@ -463,14 +617,14 @@ class AgenticMemorySystem:
                 for doc_id, score in zip(results['ids'][0], results['distances'][0])]
                 
     def search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """Search for memories using a hybrid retrieval approach."""
-        # Get results from ChromaDB (only do this once)
+        """Search for memories using ChromaDB vector search with cache-aware loading."""
+        # Get results from ChromaDB
         search_results = self.retriever.search(query, k)
         memories = []
 
-        # Process ChromaDB results
+        # Process ChromaDB results - load via cache-aware read()
         for i, doc_id in enumerate(search_results['ids'][0]):
-            memory = self.memories.get(doc_id)
+            memory = self.read(doc_id)  # Cache-aware lazy loading
             if memory:
                 memories.append({
                     'id': doc_id,
@@ -545,8 +699,9 @@ class AgenticMemorySystem:
         return memories[:k]
 
     def search_agentic(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """Search for memories using ChromaDB retrieval."""
-        if not self.memories:
+        """Search for memories using ChromaDB retrieval with linked neighbors."""
+        # No need to check self.memories - ChromaDB is source of truth
+        if self.retriever.count() == 0:
             return []
             
         try:
@@ -598,14 +753,14 @@ class AgenticMemorySystem:
                 # Get links from metadata
                 links = memory.get('links', [])
                 if not links and 'id' in memory:
-                    # Try to get links from memory object
-                    mem_obj = self.memories.get(memory['id'])
+                    # Try to get links from memory object (cache-aware)
+                    mem_obj = self.read(memory['id'])
                     if mem_obj:
                         links = mem_obj.links
-                        
+
                 for link_id in links:
                     if link_id not in seen_ids and neighbor_count < k:
-                        neighbor = self.memories.get(link_id)
+                        neighbor = self.read(link_id)  # Cache-aware lazy loading
                         if neighbor:
                             memories.append({
                                 'id': link_id,
@@ -634,8 +789,8 @@ class AgenticMemorySystem:
         Returns:
             Tuple[bool, MemoryNote]: (should_evolve, processed_note)
         """
-        # For first memory or testing, just return the note without evolution
-        if not self.memories:
+        # For first memory, just return the note without evolution
+        if self.retriever.count() == 0:
             return False, note
 
         try:
@@ -727,23 +882,28 @@ class AgenticMemorySystem:
                             for i in range(min(len(memory_ids), len(new_tags_neighborhood))):
                                 memory_id = memory_ids[i]
 
-                                # Skip if memory doesn't exist
-                                if memory_id not in self.memories:
+                                # Load neighbor from ChromaDB/cache (cache-aware)
+                                neighbor_memory = self.read(memory_id)
+                                if not neighbor_memory:
+                                    logger.warning(f"Neighbor memory {memory_id} not found during evolution")
                                     continue
 
-                                # Get the memory to update
-                                neighbor_memory = self.memories[memory_id]
+                                # Prepare update kwargs
+                                update_kwargs = {}
 
                                 # Update tags
                                 if i < len(new_tags_neighborhood):
-                                    neighbor_memory.tags = new_tags_neighborhood[i]
+                                    update_kwargs['tags'] = new_tags_neighborhood[i]
 
                                 # Update context
                                 if i < len(new_context_neighborhood):
-                                    neighbor_memory.context = new_context_neighborhood[i]
+                                    update_kwargs['context'] = new_context_neighborhood[i]
 
-                                # Save the updated memory back
-                                self.memories[memory_id] = neighbor_memory
+                                # CRITICAL: Sync to ChromaDB immediately (write-through)
+                                if update_kwargs:
+                                    success = self.update(memory_id, **update_kwargs)
+                                    if not success:
+                                        logger.error(f"Failed to update neighbor {memory_id} during evolution")
 
                 return should_evolve, note
                 
