@@ -262,7 +262,7 @@ class RetrievalDebugger:
         print_header("PERFORMANCE SUMMARY")
         print_key_value("Total execution time", f"{total_time:.2f}ms")
         print_key_value("ChromaDB collection size", self.memory_system.retriever.collection.count())
-        print_key_value("In-memory index size", len(self.memory_system.memories))
+        print_key_value("LRU cache size", len(self.memory_system.cache.cache))
 
         print_subheader("Step Timing Breakdown")
         for step in self.debug_info['steps']:
@@ -272,7 +272,7 @@ class RetrievalDebugger:
         self.debug_info['performance'] = {
             "total_duration_ms": total_time,
             "collection_size": self.memory_system.retriever.collection.count(),
-            "in_memory_size": len(self.memory_system.memories)
+            "cache_size": len(self.memory_system.cache.cache)
         }
 
         self.debug_info['final_results'] = results
@@ -336,16 +336,16 @@ Examples:
     try:
         # Import and initialize memory system
         from agentic_memory.memory_system import AgenticMemorySystem
-        from agentic_memory_mcp.config import load_config
+        from agentic_memory_mcp.config import MCPConfig
 
         print(f"{Colors.CYAN}Initializing memory system...{Colors.ENDC}")
-        config = load_config()
+        config = MCPConfig.from_env()
         memory_system = AgenticMemorySystem(
             llm_backend=config.llm_backend,
             llm_model=config.llm_model,
-            embedding_model=config.embedding_model,
+            model_name=config.embedding_model,
             evo_threshold=config.evo_threshold,
-            persist_directory=config.storage_path
+            storage_path=config.storage_path
         )
         print_success("Memory system initialized")
 
