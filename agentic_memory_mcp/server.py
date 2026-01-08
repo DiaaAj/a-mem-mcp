@@ -10,6 +10,7 @@ from .config import MCPConfig
 from .tools import register_tools
 from .resources import register_resources
 from .prompts import register_prompts
+from .background import task_tracker
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class MCPMemoryServer:
         register_resources(self.server, self.memory_system)
         register_prompts(self.server, self.memory_system)
 
+        # Background task tracking
+        self._cleanup_task = None
+
         logger.info(f"MCP Memory Server initialized with config: {self.config.to_dict()}")
 
     def _init_memory_system(self) -> AgenticMemorySystem:
@@ -59,16 +63,31 @@ class MCPMemoryServer:
         """Run the MCP server via stdio transport.
 
         This method starts the server and listens for MCP protocol messages
-        over stdin/stdout.
+        over stdin/stdout. Also starts background task cleanup.
         """
         logger.info("Starting MCP server via stdio transport...")
 
-        async with stdio_server() as (read_stream, write_stream):
-            await self.server.run(
-                read_stream,
-                write_stream,
-                self.server.create_initialization_options()
-            )
+        # Start background cleanup task
+        self._cleanup_task = asyncio.create_task(task_tracker.cleanup_old_tasks())
+        logger.info("Started background task cleanup")
+
+        try:
+            async with stdio_server() as (read_stream, write_stream):
+                await self.server.run(
+                    read_stream,
+                    write_stream,
+                    self.server.create_initialization_options()
+                )
+        finally:
+            # Cancel cleanup task on shutdown
+            if self._cleanup_task:
+                logger.info("Shutting down background task cleanup")
+                self._cleanup_task.cancel()
+                try:
+                    await self._cleanup_task
+                except asyncio.CancelledError:
+                    logger.info("Background cleanup task cancelled successfully")
+                    pass
 
 
 def main():

@@ -51,17 +51,20 @@ def register_resources(server: Server, memory_system: Any) -> None:
         ]
 
     @server.read_resource()
-    async def read_resource(uri: str) -> str:
+    async def read_resource(uri: Any) -> str:
         """Read a memory resource.
 
         Args:
-            uri: Resource URI to read
+            uri: Resource URI to read (AnyUrl object from MCP)
 
         Returns:
             JSON string with resource contents
         """
+        # Convert AnyUrl object to string
+        uri_str = str(uri)
+
         try:
-            if uri == "memory://session-start":
+            if uri_str == "memory://session-start":
                 # Critical session-start instructions
                 guide = """# ⚠️ CRITICAL: AGENTIC MEMORY SYSTEM ACTIVE
 
@@ -131,7 +134,7 @@ With memory:
 """
                 return guide
 
-            elif uri == "memory://usage-guide":
+            elif uri_str == "memory://usage-guide":
                 # Return usage guide for AI agents
                 guide = """# Agentic Memory System - Usage Guide for AI Agents
 
@@ -227,25 +230,31 @@ This is YOUR long-term memory. Use it actively to build up knowledge over time. 
 """
                 return guide
 
-            elif uri == "memory://all":
+            elif uri_str == "memory://all":
                 # Return all memories with truncated content
                 all_memories = []
-                for mem_id, memory in memory_system.memories.items():
-                    # Truncate long content
-                    content = memory.content
-                    if len(content) > 200:
-                        content = content[:200] + "..."
+                # Get all memory IDs from ChromaDB (source of truth)
+                all_ids = memory_system.retriever.get_all_ids()
 
-                    mem_dict = {
-                        "id": memory.id,
-                        "content": content,
-                        "keywords": memory.keywords,
-                        "tags": memory.tags,
-                        "context": memory.context,
-                        "timestamp": memory.timestamp,
-                        "retrieval_count": memory.retrieval_count
-                    }
-                    all_memories.append(mem_dict)
+                for mem_id in all_ids:
+                    # Load memory (uses cache + ChromaDB)
+                    memory = memory_system.read(mem_id)
+                    if memory:
+                        # Truncate long content
+                        content = memory.content
+                        if len(content) > 200:
+                            content = content[:200] + "..."
+
+                        mem_dict = {
+                            "id": memory.id,
+                            "content": content,
+                            "keywords": memory.keywords,
+                            "tags": memory.tags,
+                            "context": memory.context,
+                            "timestamp": memory.timestamp,
+                            "retrieval_count": memory.retrieval_count
+                        }
+                        all_memories.append(mem_dict)
 
                 result = {
                     "total_memories": len(all_memories),
@@ -253,15 +262,18 @@ This is YOUR long-term memory. Use it actively to build up knowledge over time. 
                 }
                 return json.dumps(result, indent=2)
 
-            elif uri == "memory://stats":
+            elif uri_str == "memory://stats":
                 # Return statistics
-                total = len(memory_system.memories)
+                total = memory_system.retriever.count()
 
                 # Count tag distribution
                 tag_counts = {}
-                for memory in memory_system.memories.values():
-                    for tag in memory.tags:
-                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                all_ids = memory_system.retriever.get_all_ids()
+                for mem_id in all_ids:
+                    memory = memory_system.read(mem_id)
+                    if memory:
+                        for tag in memory.tags:
+                            tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
                 result = {
                     "total_memories": total,
@@ -271,14 +283,16 @@ This is YOUR long-term memory. Use it actively to build up knowledge over time. 
                 }
                 return json.dumps(result, indent=2)
 
-            elif uri.startswith("memory://by-tag/"):
+            elif uri_str.startswith("memory://by-tag/"):
                 # Extract tag from URI
-                tag = uri.split("/")[-1]
+                tag = uri_str.split("/")[-1]
 
                 # Filter memories by tag
                 matching = []
-                for memory in memory_system.memories.values():
-                    if tag in memory.tags:
+                all_ids = memory_system.retriever.get_all_ids()
+                for mem_id in all_ids:
+                    memory = memory_system.read(mem_id)
+                    if memory and tag in memory.tags:
                         # Truncate long content
                         content = memory.content
                         if len(content) > 200:
@@ -302,7 +316,7 @@ This is YOUR long-term memory. Use it actively to build up knowledge over time. 
 
             else:
                 return json.dumps({
-                    "error": f"Unknown resource URI: {uri}"
+                    "error": f"Unknown resource URI: {uri_str}"
                 })
 
         except Exception as e:

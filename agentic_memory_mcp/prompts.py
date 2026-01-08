@@ -142,14 +142,18 @@ def register_prompts(server: Server, memory_system: Any) -> None:
             elif name == "memory-summary":
                 tag = arguments.get("tag")
 
-                # Get memories
+                # Get memories from ChromaDB (source of truth)
+                memories = []
+                all_ids = memory_system.retriever.get_all_ids()
+                for mem_id in all_ids:
+                    memory = memory_system.read(mem_id)
+                    if memory:
+                        if tag is None or tag in memory.tags:
+                            memories.append(memory)
+
                 if tag:
-                    # Filter by tag
-                    memories = [m for m in memory_system.memories.values() if tag in m.tags]
                     title = f"# Memory Summary (tag: {tag})\n\n"
                 else:
-                    # All memories
-                    memories = list(memory_system.memories.values())
                     title = "# Memory Summary (all memories)\n\n"
 
                 # Generate summary

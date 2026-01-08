@@ -213,3 +213,4 @@ chroma_db/
 
 # Local environment files
 .env.local
+.todo

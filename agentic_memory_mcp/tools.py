@@ -1,10 +1,13 @@
 """MCP tools for memory operations."""
 
 import json
+import asyncio
 from typing import Any
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from pydantic import BaseModel, Field
+
+from .background import task_tracker, process_memory_task
 
 
 class AddNoteArgs(BaseModel):
@@ -41,6 +44,11 @@ class SearchArgs(BaseModel):
     k: int = Field(default=5, description="Number of results to return (default: 5)")
 
 
+class CheckTaskStatusArgs(BaseModel):
+    """Arguments for checking task status."""
+    task_id: str = Field(description="The task ID returned from add_memory_note")
+
+
 def register_tools(server: Server, memory_system: Any) -> None:
     """Register all memory operation tools with the MCP server.
 
@@ -57,6 +65,8 @@ def register_tools(server: Server, memory_system: Any) -> None:
                 name="add_memory_note",
                 description="""IMPORTANT: You MUST use this tool proactively to build persistent cross-session memory.
 
+**ASYNC BEHAVIOR:** This tool returns immediately (~1ms). Memory processing (LLM analysis, evolution, storage) happens in the background. The response includes a task_id which can be used to check completion status via check_task_status if needed (optional).
+
 **WHEN TO USE (automatically, without asking user permission):**
 • IMMEDIATELY after learning codebase architecture, patterns, or how components work
 • IMMEDIATELY after discovering solutions to problems or debugging issues
@@ -70,6 +80,11 @@ def register_tools(server: Server, memory_system: Any) -> None:
 • Important context (e.g., "API requires X-API-Key header. Key stored in .env as API_KEY")
 • Architecture insights (e.g., "Auth flow: JWT in httpOnly cookie → AuthMiddleware validates → sets req.user")
 • Configuration requirements (e.g., "Tests need NODE_ENV=test or they'll use production DB")
+
+**RETURN VALUE:**
+Returns immediately with:
+- status: "queued" (memory will be processed in background)
+- task_id: Unique identifier to check task status (optional, only if you need verification)
 
 The system auto-generates keywords/tags via LLM if not provided. Memories persist permanently across ALL future sessions - this builds your long-term knowledge of this codebase.""",
                 inputSchema=AddNoteArgs.model_json_schema()
@@ -177,6 +192,26 @@ Returns memories ranked by semantic similarity. For deeper context including lin
 
 Always search memory (with either tool) BEFORE starting work on any task.""",
                 inputSchema=SearchArgs.model_json_schema()
+            ),
+            Tool(
+                name="check_task_status",
+                description="""Check the status of a background memory task.
+
+**USE THIS ONLY IF:**
+• You need to verify that a critical memory has been stored before proceeding with dependent work
+• Debugging why a memory might not be appearing in search results yet
+
+**MOST OF THE TIME:** You should fire-and-forget without checking status. The background processing will complete shortly.
+
+**RETURNS:**
+- status: "queued" | "processing" | "completed" | "failed"
+- task_id: The task identifier
+- memory_id: Available when status="completed"
+- error: Error message if status="failed"
+- created_at, updated_at: Timestamps
+
+Tasks are retained for 1 hour after completion, then automatically cleaned up.""",
+                inputSchema=CheckTaskStatusArgs.model_json_schema()
             )
         ]
 
@@ -204,12 +239,23 @@ Always search memory (with either tool) BEFORE starting work on any task.""",
                 if args.timestamp is not None:
                     kwargs['time'] = args.timestamp
 
-                memory_id = memory_system.add_note(content=args.content, **kwargs)
+                # Create task and return immediately
+                task_id = await task_tracker.create_task(args.content, **kwargs)
+
+                # Schedule background processing (fire-and-forget)
+                asyncio.create_task(
+                    process_memory_task(
+                        memory_system,
+                        task_id,
+                        args.content,
+                        **kwargs
+                    )
+                )
 
                 result = {
-                    "status": "success",
-                    "memory_id": memory_id,
-                    "message": "Memory note added successfully"
+                    "status": "queued",
+                    "task_id": task_id,
+                    "message": "Memory queued for background processing"
                 }
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -291,6 +337,29 @@ Always search memory (with either tool) BEFORE starting work on any task.""",
                     "count": len(results),
                     "results": results
                 }
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+            elif name == "check_task_status":
+                args = CheckTaskStatusArgs(**arguments)
+                task = await task_tracker.get_task(args.task_id)
+
+                if task is None:
+                    result = {
+                        "status": "error",
+                        "message": f"Task not found: {args.task_id} (may have expired)"
+                    }
+                else:
+                    result = {
+                        "status": task.status,
+                        "task_id": task.task_id,
+                        "created_at": task.created_at.isoformat(),
+                        "updated_at": task.updated_at.isoformat()
+                    }
+                    if task.memory_id:
+                        result["memory_id"] = task.memory_id
+                    if task.error:
+                        result["error"] = task.error
+
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
             else:

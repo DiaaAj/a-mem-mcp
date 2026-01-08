@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from .llm_controller import LLMController
 from .retrievers import ChromaRetriever
+from .thread_safe_cache import ThreadSafeMemoryCache
 import json
 import logging
 from rank_bm25 import BM25Okapi
@@ -203,8 +204,8 @@ class AgenticMemorySystem:
             cache_size: Maximum number of memories to keep in LRU cache (default: 1000)
             enable_cache: Whether to enable memory caching (default: True)
         """
-        # Initialize LRU cache instead of self.memories dict
-        self.cache = MemoryCache(max_size=cache_size)
+        # Initialize thread-safe LRU cache instead of self.memories dict
+        self.cache = ThreadSafeMemoryCache(max_size=cache_size)
         self.cache_enabled = enable_cache
 
         self.model_name = model_name
@@ -665,7 +666,7 @@ class AgenticMemorySystem:
 
         # Process ChromaDB results
         for i, doc_id in enumerate(chroma_results['ids'][0]):
-            memory = self.memories.get(doc_id)
+            memory = self.read(doc_id)
             if memory:
                 memories.append({
                     'id': doc_id,
@@ -684,7 +685,7 @@ class AgenticMemorySystem:
         for result in embedding_results:
             memory_id = result.get('id')
             if memory_id and memory_id not in seen_ids:
-                memory = self.memories.get(memory_id)
+                memory = self.read(memory_id)
                 if memory:
                     memories.append({
                         'id': memory_id,

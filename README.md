@@ -290,6 +290,104 @@ Available models: `openai/gpt-4o-mini`, `anthropic/claude-3.5-sonnet`, `google/g
    - Use try-except blocks for LLM operations (network/API failures)
    - Implement fallback behavior when LLM analysis fails
 
+## Using as an MCP Server with Claude Code 🔌
+
+The Agentic Memory system can be used as a Model Context Protocol (MCP) server with Claude Code, enabling Claude to build persistent knowledge across all your coding sessions!
+
+### Installation
+
+1. Install the package with pip:
+```bash
+pip install agentic-memory
+```
+
+2. Configure your LLM backend by creating a `.env` file or setting environment variables:
+```bash
+# Required: Choose your LLM backend
+export LLM_BACKEND=openai  # or ollama, sglang, openrouter
+export LLM_MODEL=gpt-4o-mini
+
+# Required: API key (depending on backend)
+export OPENAI_API_KEY=sk-...  # for openai backend
+# export OPENROUTER_API_KEY=sk-or-...  # for openrouter backend
+
+# Optional: Customize storage location (default: ./chroma_db)
+export CHROMA_DB_PATH=/path/to/global/memory  # Use absolute path for global memory across all projects
+
+# Optional: Other settings
+export EMBEDDING_MODEL=all-MiniLM-L6-v2
+export EVO_THRESHOLD=100
+```
+
+### Configure Claude Code
+
+Add the MCP server to your Claude Code configuration:
+
+**For project-specific memories** (recommended for most use cases):
+Add to `.claude/settings.local.json` in your project:
+```json
+{
+  "mcpServers": {
+    "agentic-memory": {
+      "command": "agentic-memory-mcp",
+      "env": {
+        "LLM_BACKEND": "openai",
+        "LLM_MODEL": "gpt-4o-mini",
+        "OPENAI_API_KEY": "sk-...",
+        "CHROMA_DB_PATH": "./chroma_db"
+      }
+    }
+  }
+}
+```
+
+**For global memories** (shared across all projects):
+Add to your global Claude settings or use an absolute path:
+```json
+{
+  "mcpServers": {
+    "agentic-memory": {
+      "command": "agentic-memory-mcp",
+      "env": {
+        "LLM_BACKEND": "openai",
+        "LLM_MODEL": "gpt-4o-mini",
+        "OPENAI_API_KEY": "sk-...",
+        "CHROMA_DB_PATH": "/home/user/.local/share/agentic-memory/chroma_db"
+      }
+    }
+  }
+}
+```
+
+### What Does This Enable?
+
+Once configured, Claude Code will automatically:
+- **Remember codebase patterns** across sessions
+- **Store solutions** to problems you've solved
+- **Build cumulative knowledge** about your projects
+- **Recall architecture decisions** and implementation details
+- **Link related concepts** automatically through the evolution system
+
+The memory system provides 6 tools to Claude:
+- `add_memory_note` - Store new knowledge
+- `search_memories` - Semantic search through memories
+- `search_memories_agentic` - Graph-traversal search following memory links
+- `read_memory_note` - Read full memory details
+- `update_memory_note` - Update existing memories
+- `delete_memory_note` - Remove obsolete memories
+
+### Project-Specific vs Global Memory
+
+**Project-Specific** (`CHROMA_DB_PATH=./chroma_db`):
+- Each project gets its own isolated memory database
+- Memories stored relative to project directory
+- Best for project-specific knowledge
+
+**Global** (absolute path):
+- All projects share the same memory database
+- Memories accessible everywhere
+- Best for general programming knowledge and patterns
+
 ## Citation 📚
 
 If you use this code in your research, please cite our work:
