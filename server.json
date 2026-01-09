@@ -6,12 +6,12 @@
     "url": "https://github.com/DiaaAj/a-mem-mcp",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "a-mem",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "command": "a-mem-mcp",
       "transport": {
         "type": "stdio"

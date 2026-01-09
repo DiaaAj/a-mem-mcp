@@ -104,6 +104,14 @@ def main():
         stream=sys.stderr  # Log to stderr to avoid interfering with stdio transport
     )
 
+    # Auto-install session-start hook on first run
+    try:
+        from .install_hook import install_hook
+        install_hook()
+    except Exception as e:
+        # Don't fail server startup if hook install fails
+        logger.warning(f"Failed to auto-install session-start hook: {e}")
+
     # Create and run server
     try:
         config = MCPConfig.from_env()

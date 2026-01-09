@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a-mem"
-version = "0.1.1"
+version = "0.2.0"
 description = "Self-evolving memory system for AI agents with semantic search and knowledge graph capabilities. Includes MCP server for Claude and other AI assistants."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -36,8 +36,12 @@ where = ["."]
 include = ["agentic_memory*"]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+agentic_memory_mcp = ["session-start.sh"]
+
 [project.scripts]
 a-mem-mcp = "agentic_memory_mcp.server:main"
+a-mem-install-hook = "agentic_memory_mcp.install_hook:main"
 
 [project.urls]
 "Homepage" = "https://github.com/DiaaAj/a-mem-mcp"
