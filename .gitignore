@@ -214,3 +214,7 @@ chroma_db/
 # Local environment files
 .env.local
 .todo
+.mcpregistry_github_token
+.mcpregistry_registry_token
+mcp-publisher
+mcp-publisher.tar.gz
