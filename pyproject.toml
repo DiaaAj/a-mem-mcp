@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentic-memory"
-version = "0.0.1"
-description = "A library for implementing agentic memory in LLM applications."
+name = "a-mem"
+version = "0.1.0"
+description = "Self-evolving memory system for AI agents with semantic search and knowledge graph capabilities. Includes MCP server for Claude and other AI assistants."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
@@ -14,6 +14,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Development Status :: 4 - Beta",
 ]
 dependencies = [
     "sentence-transformers>=2.2.2",
@@ -36,8 +37,9 @@ include = ["agentic_memory*"]
 exclude = ["tests*"]
 
 [project.scripts]
-agentic-memory-mcp = "agentic_memory_mcp.server:main"
+a-mem-mcp = "agentic_memory_mcp.server:main"
 
 [project.urls]
-"Homepage" = "https://github.com/agiresearch/A-mem"
-"Bug Tracker" = "https://github.com/agiresearch/A-mem/issues"
+"Homepage" = "https://github.com/DiaaAj/a-mem-mcp"
+"Bug Tracker" = "https://github.com/DiaaAj/a-mem-mcp/issues"
+"Research Paper" = "https://arxiv.org/pdf/2502.12110"

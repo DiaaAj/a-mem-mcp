@@ -1,32 +1,46 @@
-# Agentic Memory
+# A-MEM: Self-evolving memory for AI agents
 
-A persistent memory system for LLM agents with automatic knowledge organization, semantic linking, and intelligent evolution powered by ChromaDB and LLM-driven metadata generation.
+**mcp-name: a-mem**
 
-## Installation
+A-MEM is a self-evolving memory system for AI agents. Unlike simple vector stores, A-MEM automatically organizes knowledge into a Zettelkasten-style graph with typed relationships. Memories don't just get stored—they evolve and connect over time.
 
-```bash
-pip install agentic-memory
-```
-
-Configure your environment:
-```bash
-# Create .env file or set environment variables
-export LLM_BACKEND=openai
-export LLM_MODEL=gpt-4o-mini
-export OPENAI_API_KEY=sk-...
-export EMBEDDING_MODEL=all-MiniLM-L6-v2
-```
+Use it as a Python library or as an MCP server with Claude and other AI assistants.
 
 ## Quick Start
 
-### As MCP Server (with Claude Code)
+### Install
 
-Add to your `.claude/settings.local.json`:
+```bash
+pip install a-mem
+```
+
+### Configure with Claude Code
+
+**Step 1: Set up environment**
+
+Copy `.env.example` to `.env` and configure your API keys:
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+**Step 2: Add MCP server**
+
+**Option A: CLI (Quick)**
+```bash
+claude mcp add --transport stdio a-mem -- a-mem-mcp
+```
+
+**Option B: JSON Config (For custom env vars)**
+
+Edit `~/.claude.json` or `.claude/settings.local.json`:
+
 ```json
 {
   "mcpServers": {
-    "agentic-memory": {
-      "command": "agentic-memory-mcp",
+    "a-mem": {
+      "command": "a-mem-mcp",
       "env": {
         "LLM_BACKEND": "openai",
         "LLM_MODEL": "gpt-4o-mini",
@@ -37,69 +51,41 @@ Add to your `.claude/settings.local.json`:
 }
 ```
 
-### As Python Library
+> **Note:** If you use a `.env` file, the `env` section in JSON is optional.
 
-```python
-from agentic_memory.memory_system import AgenticMemorySystem
+**Memory Scope:**
+- **Project-specific** (default): Each project gets isolated memory
+- **Global**: Share across projects by setting `CHROMA_DB_PATH=/home/user/.local/share/a-mem/chroma_db` in `.env`
 
-# Initialize
-memory = AgenticMemorySystem(
-    model_name='all-MiniLM-L6-v2',
-    llm_backend="openai",
-    llm_model="gpt-4o-mini"
-)
+## Features
 
-# Add memories (auto-generates keywords, tags, context via LLM)
-memory_id = memory.add_note("Neural networks process data through layers")
+**Self-Evolving Memory**  
+Memories aren't static. When you add new knowledge, A-MEM automatically finds related memories and strengthens connections, updates context, and evolves tags.
 
-# Search semantically
-results = memory.search("machine learning", k=5)
+**Semantic + Structural Search**  
+Combines vector similarity with graph traversal. Find memories by meaning, then explore their connections.
 
-# Update and delete
-memory.update(memory_id, content="Updated content")
-memory.delete(memory_id)
+## How It Works
+
+```
+t=0              t=1                t=2
+
+                 ◉───◉             ◉───◉
+ ◉               │                 ╱ │ ╲
+                 ◉                ◉──┼──◉
+                                     │
+                                     ◉
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
+            self-evolving memory
 ```
 
-## MCP Tools
+1. **Add a memory** → A-MEM extracts keywords, context, and tags via LLM
+2. **Find neighbors** → Searches for semantically similar existing memories
+3. **Evolve** → Decides whether to link, strengthen connections, or update related memories
+4. **Store** → Persists to ChromaDB with full metadata and relationships
 
-When used as an MCP server, provides 6 tools to Claude:
-
-| Tool | Description |
-|------|-------------|
-| `add_memory_note` | Store new knowledge with auto-generated metadata |
-| `search_memories` | Semantic vector search through memories |
-| `search_memories_agentic` | Graph-traversal search following memory links |
-| `read_memory_note` | Retrieve full memory by ID |
-| `update_memory_note` | Modify existing memories |
-| `delete_memory_note` | Remove memories |
-
-## Key Features
-
-**Automatic Metadata Generation**
-- LLM analyzes content to extract keywords, tags, and context
-- No manual categorization required
-- Supports partial metadata provision
-
-**Intelligent Memory Evolution**
-- Automatically links related memories
-- Updates tags and context based on relationships
-- Builds interconnected knowledge graphs
-
-**Enhanced Semantic Search**
-- Vector embeddings using content + metadata
-- ChromaDB for fast similarity search
-- Multiple search modes (basic, agentic with graph traversal)
-
-**Flexible LLM Backends**
-- OpenAI (GPT-4, GPT-4o-mini)
-- Ollama (local deployment)
-- SGLang (fast local inference)
-- OpenRouter (100+ models)
-
-**Persistent Storage**
-- ChromaDB for vector storage
-- Configurable storage path
-- Project-specific or global memory scopes
+The result: a knowledge graph that grows smarter over time, not just bigger.
 
 ## Configuration
 
@@ -107,100 +93,84 @@ When used as an MCP server, provides 6 tools to Claude:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_BACKEND` | LLM backend: openai, ollama, sglang, openrouter | openai |
-| `LLM_MODEL` | Model name | gpt-4o-mini |
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `OPENROUTER_API_KEY` | OpenRouter API key | - |
-| `EMBEDDING_MODEL` | Sentence transformer model | all-MiniLM-L6-v2 |
-| `CHROMA_DB_PATH` | Storage directory path | ./chroma_db |
-| `EVO_THRESHOLD` | Memory evolution threshold | 100 |
-| `SGLANG_HOST` | SGLang server host | http://localhost |
-| `SGLANG_PORT` | SGLang server port | 30000 |
+| `LLM_BACKEND` | `openai`, `ollama`, `sglang`, `openrouter` | `openai` |
+| `LLM_MODEL` | Model name | `gpt-4o-mini` |
+| `OPENAI_API_KEY` | OpenAI API key | — |
+| `EMBEDDING_MODEL` | Sentence transformer model | `all-MiniLM-L6-v2` |
+| `CHROMA_DB_PATH` | Storage directory | `./chroma_db` |
+| `EVO_THRESHOLD` | Evolution trigger threshold | `100` |
 
-### Memory Scope
+### Using Different Backends
 
-**Project-Specific** (default):
+**Ollama (local, free)**
 ```bash
-export CHROMA_DB_PATH=./chroma_db
+export LLM_BACKEND=ollama
+export LLM_MODEL=llama2
 ```
-Each project gets isolated memory storage.
 
-**Global** (shared across projects):
+**OpenRouter (100+ models)**
 ```bash
-export CHROMA_DB_PATH=/home/user/.local/share/agentic-memory/chroma_db
+export LLM_BACKEND=openrouter
+export LLM_MODEL=anthropic/claude-3.5-sonnet
+export OPENROUTER_API_KEY=sk-or-...
 ```
-All projects share the same memory database.
 
-## LLM Backend Examples
+## MCP Tools
 
-### OpenAI
+A-MEM exposes 6 tools to your AI agent:
+
+| Tool | Description |
+|------|-------------|
+| `add_memory_note` | Store new knowledge (async, returns immediately) |
+| `search_memories` | Semantic search across all memories |
+| `search_memories_agentic` | Search + follow graph connections |
+| `read_memory_note` | Get full details of a specific memory |
+| `update_memory_note` | Modify existing memory |
+| `delete_memory_note` | Remove a memory |
+
+### Example Usage
+
 ```python
+# The agent calls these automatically, but here's what happens:
+
+# Store a memory (returns task_id immediately)
+add_memory_note(content="Auth uses JWT in httpOnly cookies, validated by AuthMiddleware")
+
+# Search later
+search_memories(query="authentication flow", k=5)
+
+# Deep search with connections
+search_memories_agentic(query="security", k=5)
+```
+
+## Python API
+
+Use A-MEM directly in Python:
+
+```python
+from agentic_memory.memory_system import AgenticMemorySystem
+
 memory = AgenticMemorySystem(
     llm_backend="openai",
-    llm_model="gpt-4o-mini",
-    model_name="all-MiniLM-L6-v2"
+    llm_model="gpt-4o-mini"
 )
+
+# Add (auto-generates keywords, tags, context)
+memory_id = memory.add_note("FastAPI app uses dependency injection for DB sessions")
+
+# Search
+results = memory.search("database patterns", k=5)
+
+# Read full details
+note = memory.read(memory_id)
+print(note.keywords, note.tags, note.links)
 ```
 
-### Ollama (Local)
-```python
-memory = AgenticMemorySystem(
-    llm_backend="ollama",
-    llm_model="llama2",
-    model_name="all-MiniLM-L6-v2"
-)
-```
+## Research
 
-### SGLang (Fast Local)
-```bash
-# Start server
-python -m sglang.launch_server --model-path meta-llama/Llama-3.1-8B-Instruct
-```
-```python
-memory = AgenticMemorySystem(
-    llm_backend="sglang",
-    llm_model="meta-llama/Llama-3.1-8B-Instruct",
-    sglang_host="http://localhost",
-    sglang_port=30000,
-    model_name="all-MiniLM-L6-v2"
-)
-```
+A-MEM implements concepts from the paper:
 
-### OpenRouter (Multi-Provider)
-```python
-memory = AgenticMemorySystem(
-    llm_backend="openrouter",
-    llm_model="openai/gpt-4o-mini",
-    api_key="sk-or-...",
-    model_name="all-MiniLM-L6-v2"
-)
-```
+> **A-MEM: Agentic Memory for LLM Agents**  
+> Xu et al., 2025  
+> [arXiv:2502.12110](https://arxiv.org/pdf/2502.12110)
 
-## How It Works
-
-1. **Add Memory**: Content is analyzed by LLM to generate keywords, tags, and context
-2. **Enhanced Embedding**: Vector embeddings include both content and metadata
-3. **Storage**: Memories stored in ChromaDB with rich semantic information
-4. **Evolution**: System finds related memories and creates bidirectional links
-5. **Search**: Semantic search uses enhanced embeddings for superior retrieval
-
-## Research Paper
-
-For more details, see our paper: [A-MEM: Agentic Memory for LLM Agents](https://arxiv.org/pdf/2502.12110)
-
-To reproduce research results, visit: [https://github.com/WujiangXu/AgenticMemory](https://github.com/WujiangXu/AgenticMemory)
-
-## Citation
-
-```bibtex
-@article{xu2025mem,
-  title={A-mem: Agentic memory for llm agents},
-  author={Xu, Wujiang and Liang, Zujie and Mei, Kai and Gao, Hang and Tan, Juntao and Zhang, Yongfeng},
-  journal={arXiv preprint arXiv:2502.12110},
-  year={2025}
-}
-```
-
-## License
-
-MIT License - See LICENSE for details.
