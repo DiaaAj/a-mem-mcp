@@ -6,6 +6,8 @@ A-MEM is a self-evolving memory system for AI agents. Unlike simple vector store
 
 Use it as a Python library or as an MCP server with Claude and other AI assistants.
 
+<img src="/Figure/cover.png">
+
 ## Quick Start
 
 ### Install
