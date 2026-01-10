@@ -1,8 +1,10 @@
 # A-MEM: Self-evolving memory for coding agents
 
-[![PyPI version](https://img.shields.io/pypi/v/a-mem)](https://pypi.org/project/a-mem/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/a-mem)](https://pypi.org/project/a-mem/)
-[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/?q=io.github.DiaaAj%2Fa-mem-mcp)
+<p align="center">
+  <a href="https://pypi.org/project/a-mem/"><img src="https://img.shields.io/pypi/v/a-mem" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/a-mem/"><img src="https://img.shields.io/pypi/dm/a-mem" alt="PyPI downloads"></a>
+  <a href="https://registry.modelcontextprotocol.io/?q=io.github.DiaaAj%2Fa-mem-mcp"><img src="https://img.shields.io/badge/MCP-Registry-blue" alt="MCP Registry"></a>
+</p>
 
 **mcp-name: io.github.DiaaAj/a-mem-mcp**
 
