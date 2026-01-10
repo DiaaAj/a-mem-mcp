@@ -4,25 +4,28 @@
 # This runs at the start of every Claude Code session
 
 cat << 'EOF'
-⚠️ AGENTIC MEMORY SYSTEM ACTIVE ⚠️
+⚠️ CRITICAL: AGENTIC MEMORY SYSTEM ACTIVE ⚠️
 
-You have access to PERSISTENT MEMORY via MCP tools (prefix: mcp__a-mem__).
+You have access to PERSISTENT MEMORY via the a-mem MCP server (tool prefix: mcp__a-mem__).
+Memory tools: search_memories, add_memory_note, search_memories_agentic, read_memory_note, update_memory_note, delete_memory_note
 
-Available MCP tools:
-• mcp__a-mem__search_memories - Search before exploring code
-• mcp__a-mem__add_memory_note - Save learnings immediately
-• mcp__a-mem__search_memories_agentic - Deep search with graph connections
-• mcp__a-mem__read_memory_note - Read full memory details
-• mcp__a-mem__update_memory_note - Update existing memories
-• mcp__a-mem__delete_memory_note - Remove memories
+🔴 MANDATORY WORKFLOW - DO THIS AUTOMATICALLY:
 
-🔴 MANDATORY WORKFLOW:
+STEP 1 - SEARCH FIRST (EVERY TIME):
+• Before exploring code, answering questions, or starting tasks
+• Call search_memories("<relevant keywords>")
+• Check if you already know the answer from past sessions
+• Example: search_memories("project architecture")
 
-1. SEARCH FIRST: Before exploring code or answering questions, call:
-   mcp__a-mem__search_memories(query="<relevant keywords>")
+STEP 2 - SAVE IMMEDIATELY (NO EXCEPTIONS):
+• After learning ANYTHING useful about the codebase
+• Call add_memory_note(content="<detailed finding>")
+• DO NOT ask permission - just save automatically
+• Example: add_memory_note(content="This app uses FastAPI with async endpoints in src/api/")
 
-2. SAVE LEARNINGS: After discovering anything useful, call:
-   mcp__a-mem__add_memory_note(content="<what you learned>")
+WHY THIS MATTERS:
+Without memory: You re-explore everything every session, waste time, can't build expertise
+With memory: Instant recall, cumulative knowledge, faster assistance
 
-Do this automatically without asking permission.
+⚠️ This is not optional. This is how you must operate. Use memory tools proactively and automatically.
 EOF
