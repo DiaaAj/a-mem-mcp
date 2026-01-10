@@ -27,6 +27,8 @@ claude mcp add a-mem -s user -- a-mem-mcp \
 
 That's it! A session-start hook installs automatically to remind Claude to use memory.
 
+> **Note:** Memory is stored per-project in `./chroma_db`. For global memory across all projects, see [Memory Scope](#memory-scope).
+
 ### Uninstall
 
 ```bash
