@@ -2,9 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/a-mem)](https://pypi.org/project/a-mem/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/a-mem)](https://pypi.org/project/a-mem/)
-[![Python](https://img.shields.io/pypi/pyversions/a-mem)](https://pypi.org/project/a-mem/)
-[![License](https://img.shields.io/github/license/DiaaAj/a-mem-mcp)](https://github.com/DiaaAj/a-mem-mcp/blob/main/LICENSE)
-[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.DiaaAj/a-mem-mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/?q=io.github.DiaaAj%2Fa-mem-mcp)
 
 **mcp-name: io.github.DiaaAj/a-mem-mcp**
 
