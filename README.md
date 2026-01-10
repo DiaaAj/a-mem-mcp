@@ -16,56 +16,23 @@ Use it as a Python library or as an MCP server with Claude and other AI assistan
 pip install a-mem
 ```
 
-### Configure with Claude Code
-
-**Step 1: Set up environment**
-
-Copy `.env.example` to `.env` and configure your API keys:
+### Add to Claude Code
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys
+claude mcp add a-mem -s user -- a-mem-mcp \
+  -e LLM_BACKEND=openai \
+  -e LLM_MODEL=gpt-4o-mini \
+  -e OPENAI_API_KEY=sk-...
 ```
 
-**Step 2: Add MCP server**
+That's it! A session-start hook installs automatically to remind Claude to use memory.
 
-**Option A: CLI (Quick)**
+### Uninstall
+
 ```bash
-claude mcp add --transport stdio a-mem -- a-mem-mcp
+a-mem-uninstall-hook   # Remove hooks first
+pip uninstall a-mem
 ```
-
-**Option B: JSON Config (For custom env vars)**
-
-Edit `~/.claude.json` or `.claude/settings.local.json`:
-
-```json
-{
-  "mcpServers": {
-    "a-mem": {
-      "command": "a-mem-mcp",
-      "env": {
-        "LLM_BACKEND": "openai",
-        "LLM_MODEL": "gpt-4o-mini",
-        "OPENAI_API_KEY": "sk-..."
-      }
-    }
-  }
-}
-```
-
-> **Note:** If you use a `.env` file, the `env` section in JSON is optional.
-
-**Memory Scope:**
-- **Project-specific** (default): Each project gets isolated memory
-- **Global**: Share across projects by setting `CHROMA_DB_PATH=/home/user/.local/share/a-mem/chroma_db` in `.env`
-
-## Features
-
-**Self-Evolving Memory**  
-Memories aren't static. When you add new knowledge, A-MEM automatically finds related memories and strengthens connections, updates context, and evolves tags.
-
-**Semantic + Structural Search**  
-Combines vector similarity with graph traversal. Find memories by meaning, then explore their connections.
 
 ## How It Works
 
@@ -75,8 +42,8 @@ t=0              t=1                t=2
                  ◉───◉             ◉───◉
  ◉               │                 ╱ │ ╲
                  ◉                ◉──┼──◉
-                                     │
-                                     ◉
+                                    │
+                                    ◉
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
             self-evolving memory
@@ -89,33 +56,13 @@ t=0              t=1                t=2
 
 The result: a knowledge graph that grows smarter over time, not just bigger.
 
-## Configuration
+## Features
 
-### Environment Variables
+**Self-Evolving Memory**
+Memories aren't static. When you add new knowledge, A-MEM automatically finds related memories and strengthens connections, updates context, and evolves tags.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_BACKEND` | `openai`, `ollama`, `sglang`, `openrouter` | `openai` |
-| `LLM_MODEL` | Model name | `gpt-4o-mini` |
-| `OPENAI_API_KEY` | OpenAI API key | — |
-| `EMBEDDING_MODEL` | Sentence transformer model | `all-MiniLM-L6-v2` |
-| `CHROMA_DB_PATH` | Storage directory | `./chroma_db` |
-| `EVO_THRESHOLD` | Evolution trigger threshold | `100` |
-
-### Using Different Backends
-
-**Ollama (local, free)**
-```bash
-export LLM_BACKEND=ollama
-export LLM_MODEL=llama2
-```
-
-**OpenRouter (100+ models)**
-```bash
-export LLM_BACKEND=openrouter
-export LLM_MODEL=anthropic/claude-3.5-sonnet
-export OPENROUTER_API_KEY=sk-or-...
-```
+**Semantic + Structural Search**
+Combines vector similarity with graph traversal. Find memories by meaning, then explore their connections.
 
 ## MCP Tools
 
@@ -145,6 +92,69 @@ search_memories(query="authentication flow", k=5)
 search_memories_agentic(query="security", k=5)
 ```
 
+## Advanced Configuration
+
+### JSON Config
+
+For more control, edit `~/.claude/settings.json` (global) or `.claude/settings.local.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "a-mem": {
+      "command": "a-mem-mcp",
+      "env": {
+        "LLM_BACKEND": "openai",
+        "LLM_MODEL": "gpt-4o-mini",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_BACKEND` | `openai`, `ollama`, `sglang`, `openrouter` | `openai` |
+| `LLM_MODEL` | Model name | `gpt-4o-mini` |
+| `OPENAI_API_KEY` | OpenAI API key | — |
+| `EMBEDDING_MODEL` | Sentence transformer model | `all-MiniLM-L6-v2` |
+| `CHROMA_DB_PATH` | Storage directory | `./chroma_db` |
+| `EVO_THRESHOLD` | Evolution trigger threshold | `100` |
+
+### Memory Scope
+
+- **Project-specific** (default): Each project gets isolated memory in `./chroma_db`
+- **Global**: Share across projects by setting `CHROMA_DB_PATH=~/.local/share/a-mem/chroma_db`
+
+### Alternative Backends
+
+**Ollama (local, free)**
+```bash
+claude mcp add a-mem -s user -- a-mem-mcp \
+  -e LLM_BACKEND=ollama \
+  -e LLM_MODEL=llama2
+```
+
+**OpenRouter (100+ models)**
+```bash
+claude mcp add a-mem -s user -- a-mem-mcp \
+  -e LLM_BACKEND=openrouter \
+  -e LLM_MODEL=anthropic/claude-3.5-sonnet \
+  -e OPENROUTER_API_KEY=sk-or-...
+```
+
+### Hook Management
+
+The session-start hook reminds Claude to use memory tools. It installs automatically, but you can manage it manually:
+
+```bash
+a-mem-install-hook     # Install/reinstall hook
+a-mem-uninstall-hook   # Remove hook completely
+```
+
 ## Python API
 
 Use A-MEM directly in Python:
@@ -172,7 +182,6 @@ print(note.keywords, note.tags, note.links)
 
 A-MEM implements concepts from the paper:
 
-> **A-MEM: Agentic Memory for LLM Agents**  
-> Xu et al., 2025  
+> **A-MEM: Agentic Memory for LLM Agents**
+> Xu et al., 2025
 > [arXiv:2502.12110](https://arxiv.org/pdf/2502.12110)
-
