@@ -1,8 +1,8 @@
-# A-MEM: Self-evolving memory for AI agents
+# A-MEM: Self-evolving memory for coding agents
 
 **mcp-name: io.github.DiaaAj/a-mem-mcp**
 
-A-MEM is a self-evolving memory system for AI agents. Unlike simple vector stores, A-MEM automatically organizes knowledge into a Zettelkasten-style graph with typed relationships. Memories don't just get stored—they evolve and connect over time.
+A-MEM is a self-evolving memory system for coding agents. Unlike simple vector stores, A-MEM automatically organizes knowledge into a Zettelkasten-style graph with typed relationships. Memories don't just get stored—they evolve and connect over time.
 
 Currently tested with **Claude Code**. Support for other MCP-compatible agents is planned.
 
@@ -68,7 +68,7 @@ Combines vector similarity with graph traversal. Find memories by meaning, then 
 
 ## MCP Tools
 
-A-MEM exposes 6 tools to your AI agent:
+A-MEM exposes 6 tools to your coding agent:
 
 | Tool | Description |
 |------|-------------|
