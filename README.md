@@ -1,5 +1,11 @@
 # A-MEM: Self-evolving memory for coding agents
 
+[![PyPI version](https://img.shields.io/pypi/v/a-mem)](https://pypi.org/project/a-mem/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/a-mem)](https://pypi.org/project/a-mem/)
+[![Python](https://img.shields.io/pypi/pyversions/a-mem)](https://pypi.org/project/a-mem/)
+[![License](https://img.shields.io/github/license/DiaaAj/a-mem-mcp)](https://github.com/DiaaAj/a-mem-mcp/blob/main/LICENSE)
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.DiaaAj/a-mem-mcp)
+
 **mcp-name: io.github.DiaaAj/a-mem-mcp**
 
 A-MEM is a self-evolving memory system for coding agents. Unlike simple vector stores, A-MEM automatically organizes knowledge into a Zettelkasten-style graph with typed relationships. Memories don't just get stored—they evolve and connect over time.
