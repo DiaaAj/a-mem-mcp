@@ -4,7 +4,7 @@
 
 A-MEM is a self-evolving memory system for AI agents. Unlike simple vector stores, A-MEM automatically organizes knowledge into a Zettelkasten-style graph with typed relationships. Memories don't just get stored—they evolve and connect over time.
 
-Use it as a Python library or as an MCP server with Claude and other AI assistants.
+Currently tested with **Claude Code**. Support for other MCP-compatible agents is planned.
 
 <img src="/Figure/cover.png">
 
@@ -148,9 +148,9 @@ claude mcp add a-mem -s user -- a-mem-mcp \
   -e OPENROUTER_API_KEY=sk-or-...
 ```
 
-### Hook Management
+### Hook Management (Claude Code)
 
-The session-start hook reminds Claude to use memory tools. It installs automatically, but you can manage it manually:
+The session-start hook reminds Claude to use memory tools. It installs automatically with Claude Code, but you can manage it manually:
 
 ```bash
 a-mem-install-hook     # Install/reinstall hook
@@ -159,7 +159,7 @@ a-mem-uninstall-hook   # Remove hook completely
 
 ## Python API
 
-Use A-MEM directly in Python:
+Use A-MEM directly in Python (works with any agent or application):
 
 ```python
 from agentic_memory.memory_system import AgenticMemorySystem
