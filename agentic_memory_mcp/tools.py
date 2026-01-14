@@ -63,30 +63,31 @@ def register_tools(server: Server, memory_system: Any) -> None:
         return [
             Tool(
                 name="add_memory_note",
-                description="""IMPORTANT: You MUST use this tool proactively to build persistent cross-session memory.
+                description="""Save learnings to persistent memory. This builds cross-session knowledge.
 
-**ASYNC BEHAVIOR:** This tool returns immediately (~1ms). Memory processing (LLM analysis, evolution, storage) happens in the background. The response includes a task_id which can be used to check completion status via check_task_status if needed (optional).
+**SELF-COMMITMENT:** After exploring code or completing research, say: "I learned something new - saving to memory..." then IMMEDIATELY call this tool. This verbal commitment ensures you don't forget to save.
 
-**WHEN TO USE (automatically, without asking user permission):**
-• IMMEDIATELY after learning codebase architecture, patterns, or how components work
-• IMMEDIATELY after discovering solutions to problems or debugging issues
-• IMMEDIATELY after exploring code/docs and gaining insights
-• IMMEDIATELY after completing tasks - store key learnings and decisions
-• IMMEDIATELY when you encounter important context that would help in future sessions
+**EXPLICIT TRIGGERS - Save memory when you just:**
+• Used Read tool to understand a file → save what you learned about it
+• Used Grep/Glob to find code patterns → save the pattern location
+• Fixed a bug or solved an error → save the solution
+• Discovered how components connect → save the architecture insight
+• Found configuration requirements → save them for next time
 
 **WHAT TO SAVE:**
-• Codebase patterns (e.g., "This React app uses Redux Toolkit for state, stored in src/store/")
-• Solutions & fixes (e.g., "Build fails with ENOENT? Run 'npm install' first - missing dependencies")
-• Important context (e.g., "API requires X-API-Key header. Key stored in .env as API_KEY")
-• Architecture insights (e.g., "Auth flow: JWT in httpOnly cookie → AuthMiddleware validates → sets req.user")
-• Configuration requirements (e.g., "Tests need NODE_ENV=test or they'll use production DB")
+• Architecture: "Auth flow: JWT in cookie → AuthMiddleware → req.user"
+• Locations: "API routes defined in src/api/, use FastAPI"
+• Solutions: "ENOENT error? Run npm install first"
+• Patterns: "All components use React Query for data fetching"
 
-**RETURN VALUE:**
-Returns immediately with:
-- status: "queued" (memory will be processed in background)
-- task_id: Unique identifier to check task status (optional, only if you need verification)
+**SKIP SAVING when:**
+• Memory search already had the answer (nothing new learned)
+• Information is trivial or obvious
+• You only read a file without gaining reusable insight
 
-The system auto-generates keywords/tags via LLM if not provided. Memories persist permanently across ALL future sessions - this builds your long-term knowledge of this codebase.""",
+**ASYNC:** Returns immediately. Processing happens in background.
+
+⚠️ **REMEMBER:** If you used search_memories at the start but then explored code to find the answer, you MUST save what you discovered.""",
                 inputSchema=AddNoteArgs.model_json_schema()
             ),
             Tool(
@@ -143,54 +144,42 @@ The memory system evolves connections automatically, so removing a memory may af
                 name="search_memories",
                 description="""CRITICAL: ALWAYS search persistent memory BEFORE starting work. This prevents re-discovering what you already know.
 
-**USE THIS FIRST (before exploring or asking questions):**
-• AT THE START of any task - search for relevant past learnings about this codebase
-• BEFORE debugging - check if you've solved similar problems before
-• BEFORE exploring code - see if you've already documented how it works
-• WHEN ASKED about topics - search memory first before saying "I don't know"
-• BEFORE making architectural decisions - check past learnings about patterns used here
+**SELF-COMMITMENT:** When you receive a task, FIRST say: "Let me check my memory for relevant context..." then IMMEDIATELY call this tool. This verbal commitment ensures you don't skip the search.
+
+**EXPLICIT TRIGGERS - Search memory when:**
+• User asks "how does X work?" → search("X architecture")
+• User asks to fix/debug something → search("error X solution")
+• User asks about a file/component → search("component-name")
+• User asks to implement something → search("similar feature patterns")
+• You're about to use Grep/Glob/Read to explore → STOP, search memory first
 
 **SEARCH STRATEGY:**
 • Use specific terms: component names, tech stack, error messages, feature names
 • Try multiple searches if first yields no results (different keywords)
 • Search returns top-k most semantically similar memories from ALL past sessions
 
-**WORKFLOW:**
-1. User asks question or gives task
-2. YOU IMMEDIATELY search memory for relevant context
-3. Use found knowledge as foundation
-4. Only explore/research if memory search yields nothing useful
-5. After learning new things, SAVE them with add_memory_note
+**RETURNS:** Metadata only (id, context, keywords, tags, score) - NO full content. Use read_memory_note(memory_id) to get full content for relevant memories.
 
-Returns memories ranked by semantic similarity. For deeper context including linked memories, use search_memories_agentic instead.""",
+⚠️ **AFTER COMPLETING WORK:** If you explored code, read files, or discovered anything NEW beyond what memory returned, call add_memory_note() to save it. If memory already had the answer and no new exploration was needed, saving is not required.""",
                 inputSchema=SearchArgs.model_json_schema()
             ),
             Tool(
                 name="search_memories_agentic",
                 description="""Advanced memory search that follows the knowledge graph - returns semantically similar memories PLUS their linked neighbors.
 
-**USE THIS WHEN:**
-• You need DEEP context about complex, interconnected topics
-• Simple search_memories gives limited results but you need more related info
-• Exploring how different concepts/components relate to each other
-• Understanding system architecture with many connected parts
+**WHEN TO USE THIS INSTEAD OF search_memories:**
+• Complex architectural questions spanning multiple components
+• Need to understand relationships between concepts
+• Simple search_memories gave limited results but you need more context
 
 **HOW IT WORKS:**
 1. Finds semantically similar memories (like search_memories)
-2. ALSO retrieves memories linked through the evolution system's relationship graph
-3. Returns expanded result set showing knowledge clusters and connections
+2. ALSO retrieves linked memories through the knowledge graph
+3. Returns expanded result set showing knowledge clusters
 
-**WHEN TO PREFER THIS OVER search_memories:**
-• Complex architectural questions spanning multiple components
-• Need to understand relationships between concepts
-• Building comprehensive mental model of interconnected systems
+**RETURNS:** Metadata only (id, context, keywords, tags, timestamp, category, is_neighbor, score) - NO full content. Use read_memory_note(memory_id) to get full content.
 
-**WHEN TO USE BASIC search_memories INSTEAD:**
-• Quick lookups for specific facts
-• Narrow, focused queries
-• Performance-sensitive situations (this is slower but more thorough)
-
-Always search memory (with either tool) BEFORE starting work on any task.""",
+⚠️ **AFTER COMPLETING WORK:** If you explored code or discovered anything NEW beyond what memory returned, call add_memory_note() to save it.""",
                 inputSchema=SearchArgs.model_json_schema()
             ),
             Tool(

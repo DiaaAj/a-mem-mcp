@@ -629,7 +629,6 @@ class AgenticMemorySystem:
             if memory:
                 memories.append({
                     'id': doc_id,
-                    'content': memory.content,
                     'context': memory.context,
                     'keywords': memory.keywords,
                     'tags': memory.tags,
@@ -726,10 +725,9 @@ class AgenticMemorySystem:
                 if i < len(results['metadatas'][0]):
                     metadata = results['metadatas'][0][i]
                     
-                    # Create result dictionary with all metadata fields
+                    # Create result dictionary with metadata fields (no content - use read_memory_note for full content)
                     memory_dict = {
                         'id': doc_id,
-                        'content': metadata.get('content', ''),
                         'context': metadata.get('context', ''),
                         'keywords': metadata.get('keywords', []),
                         'tags': metadata.get('tags', []),
@@ -765,7 +763,6 @@ class AgenticMemorySystem:
                         if neighbor:
                             memories.append({
                                 'id': link_id,
-                                'content': neighbor.content,
                                 'context': neighbor.context,
                                 'keywords': neighbor.keywords,
                                 'tags': neighbor.tags,

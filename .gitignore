@@ -218,3 +218,6 @@ chroma_db/
 .mcpregistry_registry_token
 mcp-publisher
 mcp-publisher.tar.gz
+
+# Local scripts
+scripts/
