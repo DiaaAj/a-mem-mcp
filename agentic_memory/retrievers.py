@@ -127,6 +127,68 @@ class ChromaRetriever:
 
         return results
 
+    def search_with_filter(
+        self,
+        query: Optional[str] = None,
+        where: Optional[Dict] = None,
+        k: int = 10
+    ) -> Dict:
+        """Search with optional semantic query and metadata filter.
+
+        This method supports three modes:
+        1. Semantic search only (query provided, no where)
+        2. Filter only (where provided, no query)
+        3. Combined semantic + filter (both provided)
+
+        Args:
+            query: Optional semantic search query text
+            where: Optional ChromaDB where clause for metadata filtering
+            k: Number of results to return
+
+        Returns:
+            Dict with documents, metadatas, ids, and distances
+        """
+        if query:
+            # Semantic search with optional filter
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=k,
+                where=where
+            )
+        else:
+            # Filter-only search (no semantic ranking)
+            results = self.collection.get(
+                where=where,
+                limit=k
+            )
+            # Convert get() format to query() format for consistency
+            if results['ids']:
+                results = {
+                    'ids': [results['ids']],
+                    'metadatas': [results['metadatas']],
+                    'documents': [results['documents']] if results.get('documents') else [[]],
+                    'distances': [[]]  # No distances for non-semantic search
+                }
+            else:
+                results = {
+                    'ids': [[]],
+                    'metadatas': [[]],
+                    'documents': [[]],
+                    'distances': [[]]
+                }
+
+        # Deserialize metadata
+        if 'metadatas' in results and results['metadatas'] and len(results['metadatas']) > 0:
+            for i in range(len(results['metadatas'])):
+                if isinstance(results['metadatas'][i], list):
+                    for j in range(len(results['metadatas'][i])):
+                        if isinstance(results['metadatas'][i][j], dict):
+                            results['metadatas'][i][j] = self._deserialize_metadata(
+                                results['metadatas'][i][j]
+                            )
+
+        return results
+
     def _deserialize_metadata(self, metadata: Dict) -> Dict:
         """Deserialize ChromaDB metadata (convert JSON strings back to native types).
 

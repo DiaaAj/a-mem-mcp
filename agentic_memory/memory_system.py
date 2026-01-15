@@ -539,7 +539,52 @@ class AgenticMemorySystem:
             return note
 
         return None
-    
+
+    def read_multiple(self, memory_ids: List[str]) -> Dict[str, Optional[MemoryNote]]:
+        """Read multiple memories by ID with cache-aware batch loading.
+
+        Implements cache-first pattern for batch operations:
+        1. Check cache for each memory ID (fast O(1) lookups)
+        2. Batch fetch cache misses from ChromaDB (single query)
+        3. Cache all loaded memories for future reads
+
+        Args:
+            memory_ids: List of memory IDs to retrieve
+
+        Returns:
+            Dict mapping memory_id to MemoryNote (or None if not found)
+        """
+        results = {}
+        ids_to_fetch = []
+
+        # Phase 1: Check cache for each ID
+        for memory_id in memory_ids:
+            if self.cache_enabled:
+                cached = self.cache.get(memory_id)
+                if cached:
+                    cached.last_accessed = datetime.now().strftime("%Y%m%d%H%M")
+                    cached.retrieval_count += 1
+                    results[memory_id] = cached
+                    continue
+            ids_to_fetch.append(memory_id)
+
+        # Phase 2: Batch fetch cache misses from ChromaDB
+        if ids_to_fetch:
+            metadata_map = self.retriever.get_by_ids(ids_to_fetch)
+            for memory_id in ids_to_fetch:
+                metadata = metadata_map.get(memory_id)
+                if metadata:
+                    note = self._metadata_to_memory_note(metadata)
+                    note.last_accessed = datetime.now().strftime("%Y%m%d%H%M")
+                    note.retrieval_count += 1
+                    if self.cache_enabled:
+                        self.cache.put(memory_id, note)
+                    results[memory_id] = note
+                else:
+                    results[memory_id] = None
+
+        return results
+
     def update(self, memory_id: str, **kwargs) -> bool:
         """Update a memory note with write-through caching.
 
@@ -776,6 +821,75 @@ class AgenticMemorySystem:
             return memories[:k]
         except Exception as e:
             logger.error(f"Error in search_agentic: {str(e)}")
+            return []
+
+    def search_by_time(
+        self,
+        time_from: Optional[str] = None,
+        time_to: Optional[str] = None,
+        query: Optional[str] = None,
+        k: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Search memories within a time range, optionally with semantic query.
+
+        Args:
+            time_from: Start of time range in YYYYMMDDHHMM format (inclusive)
+            time_to: End of time range in YYYYMMDDHHMM format (inclusive)
+            query: Optional semantic search query
+            k: Maximum number of results
+
+        Returns:
+            List of memory dicts sorted by recency (or similarity if query provided)
+        """
+        if self.retriever.count() == 0:
+            return []
+
+        try:
+            # Fetch more results than k to account for time filtering
+            # (we filter by time in Python since ChromaDB comparison operators
+            # only work with numeric types, and timestamps are stored as strings)
+            fetch_limit = min(k * 10, self.retriever.count())  # Fetch up to 10x k
+
+            # Execute search (with semantic query if provided, else get all)
+            results = self.retriever.search_with_filter(query=query, where=None, k=fetch_limit)
+
+            # Process results into memory dicts with time filtering
+            memories = []
+            if 'ids' in results and results['ids'] and len(results['ids'][0]) > 0:
+                for i, doc_id in enumerate(results['ids'][0]):
+                    metadata = results['metadatas'][0][i] if i < len(results['metadatas'][0]) else {}
+                    # Ensure timestamp is string for comparison (may be int after deserialization)
+                    timestamp = str(metadata.get('timestamp', ''))
+
+                    # Apply time filter (string comparison works for YYYYMMDDHHMM format)
+                    if time_from and timestamp < time_from:
+                        continue
+                    if time_to and timestamp > time_to:
+                        continue
+
+                    memory_dict = {
+                        'id': doc_id,
+                        'context': metadata.get('context', ''),
+                        'keywords': metadata.get('keywords', []),
+                        'tags': metadata.get('tags', []),
+                        'timestamp': timestamp,
+                        'category': metadata.get('category', 'Uncategorized')
+                    }
+
+                    # Include similarity score if semantic search was used
+                    if query and results['distances'] and len(results['distances'][0]) > i:
+                        memory_dict['score'] = results['distances'][0][i]
+
+                    memories.append(memory_dict)
+
+            # Sort by timestamp (newest first) if no semantic query
+            # (If query provided, keep semantic similarity order)
+            if not query:
+                memories.sort(key=lambda m: m.get('timestamp', ''), reverse=True)
+
+            return memories[:k]
+        except Exception as e:
+            logger.error(f"Error in search_by_time: {str(e)}")
             return []
 
     def process_memory(self, note: MemoryNote) -> Tuple[bool, MemoryNote]:

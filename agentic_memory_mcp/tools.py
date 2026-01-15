@@ -20,8 +20,9 @@ class AddNoteArgs(BaseModel):
 
 
 class ReadNoteArgs(BaseModel):
-    """Arguments for reading a memory note."""
-    memory_id: str = Field(description="The ID of the memory to read")
+    """Arguments for reading one or more memory notes."""
+    memory_id: str | None = Field(default=None, description="The ID of the memory to read (for single read)")
+    memory_ids: list[str] | None = Field(default=None, description="List of memory IDs to read (for bulk read)")
 
 
 class UpdateNoteArgs(BaseModel):
@@ -47,6 +48,23 @@ class SearchArgs(BaseModel):
 class CheckTaskStatusArgs(BaseModel):
     """Arguments for checking task status."""
     task_id: str = Field(description="The task ID returned from add_memory_note")
+
+
+class SearchByTimeArgs(BaseModel):
+    """Arguments for time-based memory search."""
+    time_from: str | None = Field(
+        default=None,
+        description="Start time in YYYYMMDDHHMM format (inclusive)"
+    )
+    time_to: str | None = Field(
+        default=None,
+        description="End time in YYYYMMDDHHMM format (inclusive)"
+    )
+    query: str | None = Field(
+        default=None,
+        description="Optional semantic query to combine with time filter"
+    )
+    k: int = Field(default=10, description="Maximum results to return")
 
 
 def register_tools(server: Server, memory_system: Any) -> None:
@@ -92,13 +110,17 @@ def register_tools(server: Server, memory_system: Any) -> None:
             ),
             Tool(
                 name="read_memory_note",
-                description="""Read full details of a specific memory by ID.
+                description="""Read full details of one or more memories by ID.
 
 **WHEN TO USE:**
 • After search returns memory IDs - read full details to get complete context
 • To see evolution history showing how the memory has been refined over time
 • To view linked memories (related concepts the system connected automatically)
 • To check retrieval_count and last_accessed metadata
+
+**USAGE:**
+• Single read: provide `memory_id` - returns the note directly
+• Bulk read: provide `memory_ids` list - returns dict mapping each ID to its note
 
 **RETURNS:** Complete memory with content, keywords, tags, context, links, and evolution history.
 
@@ -183,6 +205,34 @@ The memory system evolves connections automatically, so removing a memory may af
                 inputSchema=SearchArgs.model_json_schema()
             ),
             Tool(
+                name="search_memories_by_time",
+                description="""Search memories within a specific time period.
+
+**IMPORTANT:** You must convert natural language time expressions to YYYYMMDDHHMM format before calling.
+Use your knowledge of today's date to calculate the correct timestamps.
+
+**Examples of conversion (assuming today is 2026-01-14):**
+• "yesterday" → time_from="202601130000", time_to="202601132359"
+• "last week" → time_from="202601070000", time_to="202601132359"
+• "last Wednesday" → Calculate that date, e.g. time_from="202601080000", time_to="202601082359"
+• "past 3 hours" → time_from=3 hours ago from now, time_to=now
+• "this month" → time_from="202601010000", time_to=now
+• "December 15th" → time_from="202512150000", time_to="202512152359"
+
+**Parameters:**
+• time_from: Start time in YYYYMMDDHHMM format (inclusive)
+• time_to: End time in YYYYMMDDHHMM format (inclusive, defaults to now if omitted)
+• query: Optional semantic query to filter within the time range
+• k: Maximum results (default 10)
+
+**RETURNS:** Memories sorted by recency (newest first). If query is provided, sorted by semantic similarity instead.
+
+**USE CASES:**
+• "What did we do yesterday?" → search_memories_by_time(time_from="...", time_to="...")
+• "Show me architecture notes from last week" → search_memories_by_time(time_from="...", time_to="...", query="architecture")""",
+                inputSchema=SearchByTimeArgs.model_json_schema()
+            ),
+            Tool(
                 name="check_task_status",
                 description="""Check the status of a background memory task.
 
@@ -250,30 +300,62 @@ Tasks are retained for 1 hour after completion, then automatically cleaned up.""
 
             elif name == "read_memory_note":
                 args = ReadNoteArgs(**arguments)
-                note = memory_system.read(args.memory_id)
 
-                if note is None:
-                    result = {
-                        "status": "error",
-                        "message": f"Memory not found: {args.memory_id}"
-                    }
+                # Determine if single or bulk read
+                if args.memory_ids is not None:
+                    # Bulk read
+                    notes_map = memory_system.read_multiple(args.memory_ids)
+                    result = {"status": "success", "notes": {}}
+
+                    for memory_id, note in notes_map.items():
+                        if note is None:
+                            result["notes"][memory_id] = None
+                        else:
+                            result["notes"][memory_id] = {
+                                "id": note.id,
+                                "content": note.content,
+                                "keywords": note.keywords,
+                                "tags": note.tags,
+                                "context": note.context,
+                                "timestamp": note.timestamp,
+                                "last_accessed": note.last_accessed,
+                                "links": note.links,
+                                "retrieval_count": note.retrieval_count,
+                                "category": note.category,
+                                "evolution_history": note.evolution_history
+                            }
+                elif args.memory_id is not None:
+                    # Single read (existing behavior)
+                    note = memory_system.read(args.memory_id)
+
+                    if note is None:
+                        result = {
+                            "status": "error",
+                            "message": f"Memory not found: {args.memory_id}"
+                        }
+                    else:
+                        result = {
+                            "status": "success",
+                            "note": {
+                                "id": note.id,
+                                "content": note.content,
+                                "keywords": note.keywords,
+                                "tags": note.tags,
+                                "context": note.context,
+                                "timestamp": note.timestamp,
+                                "last_accessed": note.last_accessed,
+                                "links": note.links,
+                                "retrieval_count": note.retrieval_count,
+                                "category": note.category,
+                                "evolution_history": note.evolution_history
+                            }
+                        }
                 else:
                     result = {
-                        "status": "success",
-                        "note": {
-                            "id": note.id,
-                            "content": note.content,
-                            "keywords": note.keywords,
-                            "tags": note.tags,
-                            "context": note.context,
-                            "timestamp": note.timestamp,
-                            "last_accessed": note.last_accessed,
-                            "links": note.links,
-                            "retrieval_count": note.retrieval_count,
-                            "category": note.category,
-                            "evolution_history": note.evolution_history
-                        }
+                        "status": "error",
+                        "message": "Must provide either memory_id or memory_ids"
                     }
+
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
             elif name == "update_memory_note":
@@ -324,6 +406,36 @@ Tasks are retained for 1 hour after completion, then automatically cleaned up.""
                 result = {
                     "status": "success",
                     "count": len(results),
+                    "results": results
+                }
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+            elif name == "search_memories_by_time":
+                args = SearchByTimeArgs(**arguments)
+
+                # Require at least one time constraint
+                if not args.time_from and not args.time_to:
+                    result = {
+                        "status": "error",
+                        "message": "Must provide at least one of time_from or time_to"
+                    }
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+                # Execute search
+                results = memory_system.search_by_time(
+                    time_from=args.time_from,
+                    time_to=args.time_to,
+                    query=args.query,
+                    k=args.k
+                )
+
+                result = {
+                    "status": "success",
+                    "count": len(results),
+                    "time_range": {
+                        "from": args.time_from,
+                        "to": args.time_to
+                    },
                     "results": results
                 }
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
