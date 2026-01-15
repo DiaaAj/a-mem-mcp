@@ -12,7 +12,7 @@ A-MEM is a self-evolving memory system for coding agents. Unlike simple vector s
 
 Currently tested with **Claude Code**. Support for other MCP-compatible agents is planned.
 
-<img src="/Figure/cover.png">
+<img src="/Figure/demo.gif">
 
 ## Quick Start
 
@@ -72,18 +72,23 @@ Memories aren't static. When you add new knowledge, A-MEM automatically finds re
 **Semantic + Structural Search**
 Combines vector similarity with graph traversal. Find memories by meaning, then explore their connections.
 
+**Peek and Drill**
+Start with breadth-first search to capture relevant memories via lightweight metadata (id, context, keywords, tags). Then drill depth-first into specific memories with `read_memory_note` for full content. This minimizes token usage while maximizing recall.
+
 ## MCP Tools
 
-A-MEM exposes 6 tools to your coding agent:
+A-MEM exposes 8 tools to your coding agent:
 
 | Tool | Description |
 |------|-------------|
 | `add_memory_note` | Store new knowledge (async, returns immediately) |
 | `search_memories` | Semantic search across all memories |
 | `search_memories_agentic` | Search + follow graph connections |
-| `read_memory_note` | Get full details of a specific memory |
+| `search_memories_by_time` | Search within a time range |
+| `read_memory_note` | Get full details (supports bulk reads) |
 | `update_memory_note` | Modify existing memory |
 | `delete_memory_note` | Remove a memory |
+| `check_task_status` | Check async task completion |
 
 ### Example Usage
 
