@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
+from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
-from agentic_memory.memory_system import AgenticMemorySystem
 from .config import MCPConfig
 from .tools import register_tools
 from .resources import register_resources
@@ -16,10 +16,74 @@ from .background import task_tracker
 logger = logging.getLogger(__name__)
 
 
+class LazyMemorySystem:
+    """Lazy-loading wrapper for AgenticMemorySystem.
+
+    Defers expensive initialization (embedding model loading, ChromaDB connection)
+    until first actual use. This allows the MCP server to start quickly and
+    respond to the initial handshake before the 30-second timeout.
+    """
+
+    def __init__(self, config: MCPConfig):
+        """Store config for later initialization.
+
+        Args:
+            config: MCP configuration with memory system settings
+        """
+        self._config = config
+        self._memory_system: Any = None
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
+
+    def _ensure_initialized_sync(self) -> Any:
+        """Synchronously ensure the memory system is initialized.
+
+        Returns:
+            The initialized AgenticMemorySystem instance
+        """
+        if not self._initialized:
+            logger.info("Lazy-loading AgenticMemorySystem (first access)...")
+            from agentic_memory.memory_system import AgenticMemorySystem
+
+            self._memory_system = AgenticMemorySystem(
+                model_name=self._config.embedding_model,
+                llm_backend=self._config.llm_backend,
+                llm_model=self._config.llm_model,
+                evo_threshold=self._config.evo_threshold,
+                api_key=self._config.api_key,
+                sglang_host=self._config.sglang_host,
+                sglang_port=self._config.sglang_port,
+                storage_path=self._config.storage_path
+            )
+            self._initialized = True
+            logger.info("AgenticMemorySystem initialized successfully")
+
+        return self._memory_system
+
+    def __getattr__(self, name: str) -> Any:
+        """Proxy attribute access to the underlying memory system.
+
+        Initializes the memory system on first access if needed.
+
+        Args:
+            name: Attribute name to access
+
+        Returns:
+            The attribute from the underlying memory system
+        """
+        # Avoid recursion for internal attributes
+        if name.startswith('_'):
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+        system = self._ensure_initialized_sync()
+        return getattr(system, name)
+
+
 class MCPMemoryServer:
     """MCP server wrapper for Agentic Memory System.
 
     Exposes the memory system via MCP tools, resources, and prompts.
+    Uses lazy initialization to allow fast server startup.
     """
 
     def __init__(self, config: MCPConfig | None = None):
@@ -30,9 +94,11 @@ class MCPMemoryServer:
         """
         self.config = config or MCPConfig.from_env()
         self.server = Server(self.config.server_name)
-        self.memory_system = self._init_memory_system()
 
-        # Register all MCP components
+        # Use lazy-loading wrapper - memory system won't initialize until first use
+        self.memory_system = LazyMemorySystem(self.config)
+
+        # Register all MCP components (they receive the lazy wrapper)
         register_tools(self.server, self.memory_system)
         register_resources(self.server, self.memory_system)
         register_prompts(self.server, self.memory_system)
@@ -40,24 +106,7 @@ class MCPMemoryServer:
         # Background task tracking
         self._cleanup_task = None
 
-        logger.info(f"MCP Memory Server initialized with config: {self.config.to_dict()}")
-
-    def _init_memory_system(self) -> AgenticMemorySystem:
-        """Initialize the memory system with configuration.
-
-        Returns:
-            Configured AgenticMemorySystem instance
-        """
-        return AgenticMemorySystem(
-            model_name=self.config.embedding_model,
-            llm_backend=self.config.llm_backend,
-            llm_model=self.config.llm_model,
-            evo_threshold=self.config.evo_threshold,
-            api_key=self.config.api_key,
-            sglang_host=self.config.sglang_host,
-            sglang_port=self.config.sglang_port,
-            storage_path=self.config.storage_path
-        )
+        logger.info(f"MCP Memory Server initialized (lazy mode) with config: {self.config.to_dict()}")
 
     async def run(self) -> None:
         """Run the MCP server via stdio transport.

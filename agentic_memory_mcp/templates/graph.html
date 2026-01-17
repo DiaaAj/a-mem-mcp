@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A-MEM Memory Graph</title>
+    <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            height: 100vh;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        #graph-container {
+            flex: 1;
+            height: 100%;
+        }
+        #detail-panel {
+            width: 380px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #0f3460;
+            display: none;
+            position: relative;
+        }
+        #detail-panel.visible { display: block; }
+        #detail-panel h2 {
+            font-size: 14px;
+            color: #e94560;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .detail-section {
+            margin-bottom: 20px;
+        }
+        .detail-section h3 {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        .detail-section p {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .detail-section pre {
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #0f1629;
+            padding: 10px;
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .tag {
+            display: inline-block;
+            background: #0f3460;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin: 2px;
+        }
+        .keyword { background: #533483; }
+        .link-btn {
+            background: none;
+            border: 1px solid #e94560;
+            color: #e94560;
+            padding: 4px 10px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        .link-btn:hover { background: #e94560; color: #fff; }
+        #close-panel {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        #close-panel:hover { color: #e94560; }
+        #stats {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(22, 33, 62, 0.95);
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        #stats strong { color: #e94560; }
+        #legend {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(22, 33, 62, 0.95);
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 11px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #legend h4 {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        #help {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(22, 33, 62, 0.95);
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 11px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        #help kbd {
+            background: #0f3460;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+        .meta-row:last-child { border-bottom: none; }
+        .meta-label { color: #888; }
+        .meta-value { color: #fff; }
+    </style>
+</head>
+<body>
+    <div id="graph-container"></div>
+    <div id="detail-panel">
+        <button id="close-panel">&times;</button>
+        <h2>Memory Details</h2>
+        <div id="detail-content"></div>
+    </div>
+    <div id="stats">Loading...</div>
+    <div id="legend">
+        <h4>Categories</h4>
+        <div id="legend-items"></div>
+    </div>
+    <div id="help">
+        <kbd>Click</kbd> node for details | <kbd>Scroll</kbd> to zoom | <kbd>Drag</kbd> to pan
+    </div>
+
+    <script>
+        // Graph data injected by Python
+        /* GRAPH_DATA_PLACEHOLDER */
+
+        // Category colors - vibrant palette
+        const categoryColors = {
+            'Uncategorized': '#6c757d',
+            'Architecture': '#e94560',
+            'Implementation': '#4a90d9',
+            'Configuration': '#9b59b6',
+            'Documentation': '#3498db',
+            'Testing': '#2ecc71',
+            'Bug': '#e74c3c',
+            'Feature': '#1abc9c',
+            'Security': '#e67e22',
+            'Performance': '#f39c12',
+            'Database': '#8e44ad',
+            'API': '#16a085',
+            'UI': '#d35400',
+            'DevOps': '#27ae60'
+        };
+
+        // Generate color for unknown categories
+        function stringToColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const h = hash % 360;
+            return `hsl(${h}, 65%, 55%)`;
+        }
+
+        function getColor(category) {
+            return categoryColors[category] || stringToColor(category || 'default');
+        }
+
+        // Build vis.js dataset
+        const nodes = new vis.DataSet(
+            graphData.nodes.map(n => ({
+                ...n,
+                color: {
+                    background: getColor(n.group),
+                    border: getColor(n.group),
+                    highlight: { background: '#e94560', border: '#ff6b8a' },
+                    hover: { background: getColor(n.group), border: '#fff' }
+                },
+                font: { color: '#fff', size: 11 },
+                shape: 'dot',
+                size: 12 + Math.min((n.data.links?.length || 0) * 4, 25),
+                borderWidth: 2,
+                shadow: {
+                    enabled: true,
+                    color: 'rgba(0,0,0,0.3)',
+                    size: 5
+                }
+            }))
+        );
+
+        const edges = new vis.DataSet(
+            graphData.edges.map(e => ({
+                ...e,
+                color: { color: 'rgba(100,100,120,0.6)', highlight: '#e94560', hover: '#888' },
+                width: 1.5,
+                smooth: { type: 'continuous', roundness: 0.5 }
+            }))
+        );
+
+        // Initialize network
+        const container = document.getElementById('graph-container');
+        const network = new vis.Network(container, { nodes, edges }, {
+            physics: {
+                enabled: true,
+                stabilization: {
+                    enabled: true,
+                    iterations: 150,
+                    updateInterval: 25
+                },
+                barnesHut: {
+                    gravitationalConstant: -4000,
+                    centralGravity: 0.3,
+                    springLength: 120,
+                    springConstant: 0.04,
+                    damping: 0.09
+                }
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 150,
+                zoomView: true,
+                dragView: true,
+                dragNodes: true
+            },
+            nodes: {
+                borderWidth: 2
+            }
+        });
+
+        // Disable physics after stabilization for better performance
+        network.on('stabilizationIterationsDone', () => {
+            network.setOptions({ physics: { enabled: false } });
+        });
+
+        // Stats display
+        document.getElementById('stats').innerHTML =
+            `<strong>${graphData.nodes.length}</strong> memories &nbsp;|&nbsp; ` +
+            `<strong>${graphData.edges.length}</strong> connections`;
+
+        // Build legend from unique categories
+        const categories = [...new Set(graphData.nodes.map(n => n.group))].sort();
+        document.getElementById('legend-items').innerHTML = categories.map(cat => `
+            <div class="legend-item">
+                <div class="legend-color" style="background: ${getColor(cat)}"></div>
+                <span>${cat} (${graphData.nodes.filter(n => n.group === cat).length})</span>
+            </div>
+        `).join('');
+
+        // Click handler - show detail panel
+        const detailPanel = document.getElementById('detail-panel');
+        const detailContent = document.getElementById('detail-content');
+
+        network.on('click', (params) => {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const node = nodes.get(nodeId);
+                showDetails(node);
+            }
+        });
+
+        // Double-click to focus
+        network.on('doubleClick', (params) => {
+            if (params.nodes.length > 0) {
+                network.focus(params.nodes[0], { scale: 1.5, animation: true });
+            }
+        });
+
+        document.getElementById('close-panel').onclick = () => {
+            detailPanel.classList.remove('visible');
+            network.unselectAll();
+        };
+
+        function showDetails(node) {
+            const d = node.data;
+            detailContent.innerHTML = `
+                <div class="detail-section">
+                    <h3>Context</h3>
+                    <p>${escapeHtml(d.context || 'No context')}</p>
+                </div>
+                <div class="detail-section">
+                    <h3>Content</h3>
+                    <pre>${escapeHtml(d.content)}</pre>
+                </div>
+                <div class="detail-section">
+                    <h3>Keywords</h3>
+                    <p>${(d.keywords || []).map(k =>
+                        `<span class="tag keyword">${escapeHtml(k)}</span>`
+                    ).join('') || '<em style="color:#666">None</em>'}</p>
+                </div>
+                <div class="detail-section">
+                    <h3>Tags</h3>
+                    <p>${(d.tags || []).map(t =>
+                        `<span class="tag">${escapeHtml(t)}</span>`
+                    ).join('') || '<em style="color:#666">None</em>'}</p>
+                </div>
+                <div class="detail-section">
+                    <h3>Metadata</h3>
+                    <div class="meta-row">
+                        <span class="meta-label">ID</span>
+                        <span class="meta-value" style="font-family:monospace;font-size:10px">${escapeHtml(node.id)}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Category</span>
+                        <span class="meta-value">${escapeHtml(d.category || 'Uncategorized')}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Created</span>
+                        <span class="meta-value">${formatTimestamp(d.timestamp)}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Last accessed</span>
+                        <span class="meta-value">${formatTimestamp(d.last_accessed)}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Retrievals</span>
+                        <span class="meta-value">${d.retrieval_count || 0}</span>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <h3>Linked Memories (${(d.links || []).length})</h3>
+                    <p>${(d.links || []).map(linkId => {
+                        const linkedNode = nodes.get(linkId);
+                        const label = linkedNode ? linkedNode.label : linkId.slice(0,8) + '...';
+                        return `<button class="link-btn" onclick="focusNode('${linkId}')" title="${linkId}">${escapeHtml(label)}</button>`;
+                    }).join('') || '<em style="color:#666">No links</em>'}</p>
+                </div>
+                ${d.evolution_history?.length ? `
+                <div class="detail-section">
+                    <h3>Evolution History (${d.evolution_history.length})</h3>
+                    <pre style="font-size:10px">${JSON.stringify(d.evolution_history, null, 2)}</pre>
+                </div>
+                ` : ''}
+            `;
+            detailPanel.classList.add('visible');
+        }
+
+        function focusNode(nodeId) {
+            const node = nodes.get(nodeId);
+            if (node) {
+                network.focus(nodeId, { scale: 1.2, animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+                network.selectNodes([nodeId]);
+                showDetails(node);
+            } else {
+                alert('Memory not found in current view: ' + nodeId);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTimestamp(ts) {
+            if (!ts || ts.length < 12) return ts || 'Unknown';
+            // YYYYMMDDHHMM -> readable
+            try {
+                return `${ts.slice(0,4)}-${ts.slice(4,6)}-${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}`;
+            } catch {
+                return ts;
+            }
+        }
+
+        // Expose for onclick handlers
+        window.focusNode = focusNode;
+    </script>
+</body>
+</html>
